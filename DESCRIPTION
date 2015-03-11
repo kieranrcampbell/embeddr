@@ -7,4 +7,5 @@ Depends: R (>= 3.1.2)
 License: What license is it under?
 LazyData: true
 Imports:
-  ggplot2
+  ggplot2,
+  princurve

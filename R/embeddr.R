@@ -67,20 +67,23 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
   
   L  <- diag(rowSums(W)) - W
   l <- nrow(L)
+  M <- NULL # object to be returned
   
   if(type == 'norm') {
     Ds <- diag(1/sqrt(rowSums(W)))
     L_sym <- Ds %*% L %*% Ds
     eig <- eigen(L_sym, symmetric=T) # values ordered in decreasing order
-    return( diag(Ds) * eig$vectors[,(l-1):(l-p)])
+    M <- diag(Ds) * eig$vectors[,(l-1):(l-p)]
   }
   if(type == 'unorm') {
     L  <- diag(rowSums(W)) - W
     eig <- eigen(L, symmetric=T) # values ordered in decreasing order
     l <- nrow(L)
-    return( eig$vectors[,(l-1):(l-p)])  
+    M <- eig$vectors[,(l-1):(l-p)]  
   }
-  return( NULL )
+  colnames(M) <- paste('component_', 1:p, sep='')
+  rownames(M) <- colnames(W)
+  return( data.frame(M) )
 }
 
 #' Plot the degree distribution of the weight matrix
@@ -99,4 +102,25 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
   qplot(x) + theme_bw() +
     xlab('Degree') + ylab('Distribution') +
     ggtitle('Degree distribution of weight graph')
+}
+
+cluster_embedding <- function(M, k = 3) {
+  km <- kmeans(M, 3)
+  M$cluster <- km$cluster
+  return( M )
+}
+
+fit_curve <- function(M, clusters=c(1)) {
+  library(dplyr)
+  library(princurve)
+  Mp <- filter(M, cluster %in% clusters)
+  pc <- principal.curve(as.matrix(select(Mp, component_1, component_2)))
+  Mp$pseudotime <- pc$lambda
+  Mp$trajectory_1 <- pc$s[,1]
+  Mp$trajectory_2 <- pc$s[,2]
+  return( Mp )
+}
+
+plot_embedding <- function(M) {
+  
 }
