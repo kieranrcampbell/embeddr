@@ -7,6 +7,17 @@
 #
 #
 
+#' Construct a weighted graph adjacency matrix
+#' 
+#' @param x A k by n matrix for n samples with k features (probably transpose of what you would expect)
+#' @param kernel The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
+#' 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
+#' Belkin & Niyogi
+#' @param nn Number of nearest neighbours if kernel == 'nn'
+#' @param eps Maximum distance parameter if kernel == 'dist'
+#' @param t 'time' for heat kernel if kernel == 'heat'
+#' 
+#' @return An n by n adjacency matrix
 weighted_graph <- function(x, kernel=c('nn','dist','heat'), 
                            nn = 20, eps = NULL, t = NULL) {
   ## sanity checking
@@ -39,7 +50,14 @@ weighted_graph <- function(x, kernel=c('nn','dist','heat'),
   return( W )  
 }
 
-
+#' Laplacian eigenmaps
+#' 
+#' Construct a laplacian eigenmap embedding
+#' @param W Weight matrix
+#' @param type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
+#' @param p Dimension of the embedded space, default is 2
+#' 
+#' @return The p-dimensional embedding
 laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
   type <- match.arg(type)
   if(nrow(W) != ncol(W)) {
@@ -63,4 +81,22 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
     return( eig$vectors[,(l-1):(l-p)])  
   }
   return( NULL )
+}
+
+#' Plot the degree distribution of the weight matrix
+#' 
+#' @param W Weight matrix
+#' @param ignore_weights If TRUE weights are discretised to 0 - 1
+#' @return A ggplot histogram of weights
+plot_degree_dist <- function(W, ignore_weights = FALSE) {
+  x <- NULL
+  if(ignore_weights) {
+    x <- rowSums(ceil(W))
+  } else {
+    x <- rowSums(W)
+  }
+
+  qplot(x) + theme_bw() +
+    xlab('Degree') + ylab('Distribution') +
+    ggtitle('Degree distribution of weight graph')
 }

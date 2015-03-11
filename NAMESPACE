@@ -1,1 +1,3 @@
 exportPattern("^[^\\.]")
+export(laplacian_eigenmap)
+export(weighted_graph)
