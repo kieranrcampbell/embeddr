@@ -110,7 +110,7 @@ cluster_embedding <- function(M, k = 3) {
   return( M )
 }
 
-fit_curve <- function(M, clusters=c(1)) {
+fit_curve <- function(M, clusters=NULL) {
   library(dplyr)
   library(princurve)
   Mp <- filter(M, cluster %in% clusters)
@@ -118,9 +118,34 @@ fit_curve <- function(M, clusters=c(1)) {
   Mp$pseudotime <- pc$lambda
   Mp$trajectory_1 <- pc$s[,1]
   Mp$trajectory_2 <- pc$s[,2]
+  Mp <- arrange(Mp, pseudotime)
   return( Mp )
 }
 
-plot_embedding <- function(M) {
-  
+plot_embedding <- function(M, color_by = 'cluster') {
+  library(ggplot2)
+  plt <- ggplot(data=M) + theme_bw(base_size=14)
+  if(color_by %in% names(M)) {
+    if(color_by == 'pseudotime') {
+      mapping_str <- color_by
+    } else {
+      mapping_str <- paste("as.factor(", color_by, ")")
+    }
+    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2", 
+                                       color=mapping_str))
+    if(color_by == 'pseudotime') {
+      plt <- plt + scale_color_continuous(name = color_by) 
+    } else {
+      plt <- plt + scale_color_discrete(name = color_by)
+    }
+    
+    if("pseudotime" %in% names(M)) {
+      ## curve has been fit so plot all
+      plt <- plt + geom_path(aes(x = trajectory_1, y = trajectory_2), data=M, color='black',
+                             size = 1, alpha = 0.7, linetype=2) 
+    }
+  } else {
+    plt <- plt + geom_point(aes(x = component_1, y = component_2))
+  }
+  return( plt )
 }
