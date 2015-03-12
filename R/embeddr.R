@@ -105,14 +105,44 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
     ggtitle('Degree distribution of weight graph')
 }
 
-cluster_embedding <- function(M, k = 3) {
+#' Cluster the resulting embedding
+#' 
+#' Cluster the embedded representation using either kmeans or mixture models 
+#' from the mclust package
+#' 
+#' @param M The dataframe containing the embedding (in component_1 and component_2)
+#' @param k The number of clusters to find in the data
+#' @param method Either 'kmeans' or 'mm' to use \code{mclust}
+#' 
+#' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
+cluster_embedding <- function(M, k = 3, method=c('kmeans','mm')) {
   library(dplyr)
   M_xy <- select(M, component_1, component_2)
-  km <- kmeans(M_xy, k)
-  M$cluster <- km$cluster
+  method <- match.arg(method)
+  if(method == 'kmeans') {
+    km <- kmeans(M_xy, k)
+    M$cluster <- km$cluster
+  } else if(method == 'mm') {
+    library(mclust)
+    mc <- Mclust(M_xy, G=k)
+    M$cluster <- mc$classification
+  }
   return( M )
 }
 
+#' Fit the pseudotime curve
+#' 
+#' Fits the pseudotime curve using principal curves from the princurve library
+#' 
+#' @param M The dataframe containing the embedding
+#' @param clusters The (numeric) clusters to use for the curve fitting. If NULL (default) then
+#' all points are used
+#' 
+#' @return The dataframe \code{M} with three new variables:
+#' \describe{
+#' \item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve)}
+#' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
+#' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
 fit_pseudotime <- function(M, clusters=NULL) {
   library(dplyr)
   library(princurve)
@@ -128,6 +158,16 @@ fit_pseudotime <- function(M, clusters=NULL) {
   return( Mp )
 }
 
+#' Plot the cells in the embedding
+#' 
+#' This function takes a data frame with at least positional (component_0 & component_1) information
+#' and plots the resulting embedding. If clusters are assigned it can colour by these, and if a pseudotime
+#' trajectory is assigned it will plot this through the embeddding.
+#' 
+#' @param M The dataframe containing the embedding
+#' @param color_by The variable to color the embedding with (defaults to cluster)
+#' 
+#' @return A \code{ggplot2} plot
 plot_embedding <- function(M, color_by = 'cluster') {
   library(ggplot2)
   
@@ -159,10 +199,22 @@ plot_embedding <- function(M, color_by = 'cluster') {
   return( plt )
 }
 
-plot_in_pseudotime <- function(Mp, xp, genes, short_names, nrow = NULL, ncol = NULL) {
+#' Plot cells in pseudotime
+#' 
+#' Plot a set of genes through pseudotime
+#' 
+#'  @param Mp A dataframe containing the embedding
+#'  @param xp The gene-by-cell matrix of log normalised expression counts
+#'  @param genes The genes to use for the embedding
+#'  @param short_names Short gene names to display; default NULL and \code{genes} is used for gene names
+#'  @param nrow Number of rows of plots; passed to \code{facet_wrap}
+#'  @param ncol Number of columns of plots; passed to \code{facet_wrap}
+#'  
+#'  @return A \code{ggplot2} plot
+plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
   xp <- data.frame(t(xp))
   xp <- select(xp, one_of(genes))
-  names(xp) <- short_names
+  if(!is.null(short_names)) names(xp) <- short_names
   xp$pseudotime <- Mp$pseudotime
   df_x <- melt(xp, id.vars='pseudotime', variable.name='gene', value.name='counts')
   ggplot(data=df_x, aes(x=pseudotime, y=counts)) + geom_point() +

@@ -8,4 +8,6 @@ License: What license is it under?
 LazyData: true
 Imports:
   ggplot2,
-  princurve
+  princurve,
+  plyr,
+  dplyr

@@ -63,7 +63,7 @@ plot_embedding(M, color_by = 'monocle_state')
 So there appears to be reasonable correspondance between the monocle clusters and natural clusters in our data. The `embeddr::cluster_embedding` function applies k-means clustering to the dataset:
 
 ```{r cluster-embedding, fig.align='center', cache=TRUE, message=FALSE}
-M <- cluster_embedding(M, k=3)
+M <- cluster_embedding(M, k=3, method='mm')
 plot_embedding(M)
 ```
 
@@ -174,14 +174,15 @@ ggplot(y, aes(x=factor(agree_contamination), fill=factor(agree_contamination), y
 ```
 
 So it looks like they might have missed a few expressing PDGFRA, though it's consistent across SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
-```{r markers-in-space, cache=T, fig.width=8, fig.height=6, fig.align='center'}
+```{r markers-in-space, cache=T, fig.width=8, fig.height=5, fig.align='center'}
 y <- log(exprs(HSMM[cont_genes,]) + 1)
 y <- scale(t(y))
 y <- data.frame(y)
 M_y <- cbind(M, y)
 M_y_melted <- melt(M_y, id.vars=names(M), variable.name='gene', value.name='count')
 M_y_melted$gene <- mapvalues(M_y_melted$gene, from = cont_genes, to = short_names)
-ggplot(M_y_melted, aes(x=component_1, y=component_2, size=2*count, color=factor(monocle_state))) + 
-  geom_point(alpha=0.7) + facet_wrap(~ gene) + theme_bw()
+ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(cluster))) + 
+  geom_point(alpha=0.7) + facet_wrap(~ gene) + theme_bw() +
+  scale_color_discrete(name='cluster')
 ```
 
