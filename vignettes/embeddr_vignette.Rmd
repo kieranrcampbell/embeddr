@@ -4,9 +4,10 @@ author: "Kieran Campbell"
 date: "March 2015"
 output:
   html_document:
+    fig_align: center
     fig_height: 3.8
     fig_width: 5
-    fig_align: 'center'
+  pdf_document: default
 ---
 
 Here we show how `embeddr` (= spectral embedding + principal curves) can be used for pseudotemporal ordering of single-cell gene expression data using the [monocle](http://cole-trapnell-lab.github.io/monocle-release/) dataset.
@@ -14,8 +15,13 @@ Here we show how `embeddr` (= spectral embedding + principal curves) can be used
 ```{r load-all, message=FALSE, warning=FALSE}
 library(monocle)
 library(devtools)
+library(reshape2)
+library(plyr)
+library(dplyr)
 load_all('..')
 data(HSMM)
+
+set.seed(123)
 ```
 
 First we go through cleaning the monocle dataset and selecting for marker genes only:
@@ -30,6 +36,7 @@ x <- t(scale(t(x)))
 dim(x)
 ```
 
+### Laplacian eigenmaps
 Laplacian eigenmaps require the specification of a nearest-neighbor graph. We can do this using `embeddr::weighted_graph()` using the default options of 20 nearest neighbours. Other options for creating the graph (such as distance measures and heat kernels) are also available.
 
 ```{r create-graph, cache=TRUE}
@@ -60,9 +67,121 @@ M <- cluster_embedding(M, k=3)
 plot_embedding(M)
 ```
 
-In the `monocle` paper they show that groups 2 & 3 correspond to differentiating cells while group 1 is contamination. We can separate off groups 2 & 3, fit the pseudotime trajectories and plot:
+
+### Pseudotime fitting
+In the `monocle` paper they show that groups 1 & 3 correspond to differentiating cells while group 2 is contamination. We can separate off groups 1 & 3, fit the pseudotime trajectories and plot:
 
 ```{r fit-pseudotime, fig.align='center', cache=TRUE}
-Mp <- fit_pseudotime(M, clusters=c(2,3))
+Mp <- fit_pseudotime(M, clusters=c(1,3))
 plot_embedding(Mp)
 ```
+
+Each `embeddr` function works similar to `dplyr` in that it takes the original matrix, modifies it and returns it. We can see the result of all our function calls so far:
+
+```{r show-M, cache=TRUE}
+head(Mp)
+```
+The `pseudotime` variable is a measure of pseudotime (in fact, the arc-length from the beginning of the curve). The variables `trajectory_1` and `trajectory_2` show the projections of each cell onto the curve.
+
+We can also compare our pseudotime with that of `monocle`:
+
+```{r comp-mon, cache=TRUE, fig.align='center', fig.width=4, fig.height=4}
+in_state13 <- M$cell_id[M$cluster %in% c(1,3)]
+monocle_df <- filter(pData(HSMM), cell_id %in% in_state13)
+
+qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime) +
+  theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
+```
+
+So there is good correspondence between the `monocle` and `embeddr` pseudotimes, though it appears that the `embeddr` version goes in the wrong direction. Pseudotimes are equivalent up to parity and scaling transformations (which is perhaps more philosophical than it sounds), so we can use the `embeddr::reverse_pseudotime` function to make the pseudotimes 'run' in the same direction:
+
+```{r reverse-pseudotime, fig.align='center', fig.width=4, fig.height=4}
+Mp <- reverse_pseudotime(Mp)
+qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime) +
+  theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
+```
+
+The overall correlation between the two pseudotime trajectories is `r format(round(cor(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime),2), nsmall=2)`, which is pretty good.
+
+### Plotting genes in pseudotime
+
+To plot the genes in pseudotime we need to provide the original gene values for the cells in clusters 1 & 3:
+
+```{r plot-prep, cache=TRUE, fig.align='center', fig.width=3, fig.height=5}
+xp <- select(data.frame(x), one_of(Mp$cell_id))
+
+genes_to_plot <- row.names(subset(fData(HSMM), 
+                                  gene_short_name %in% c("CDK1", "MEF2C", "MYH3")))
+gene_short_names <- fData(HSMM)[genes_to_plot,]$gene_short_name
+
+plot_in_pseudotime(Mp, xp, genes_to_plot, gene_short_names, nrow=3, ncol=1)
+```
+
+which is largely similar to the monocle equivalent.
+
+### Robustness to choice of nearest neighbours
+
+We can also show that the overall shape of the embedding is robust to a varying choice of nearest neighbours:
+
+```{r neighbour-choice, fig.align='center', fig.width=8, fig.height=6, cache=TRUE}
+nns <- c(15, 20, 25, 30, 35, 40)
+embeddings <- ldply(nns, function(i) laplacian_eigenmap(weighted_graph(x, nn = i)))
+embeddings$nn <- rep(nns, each = dim(x)[2])
+
+ggplot(data=embeddings, aes(x=component_1, y=component_2)) + geom_point() +
+  theme_bw() + facet_wrap(~ nn) +
+  ggtitle('Overall shape for variety of nearest neighbours')
+```
+
+### Unravelling the contaminated cells
+
+In the original monocle dataset, only a small number of cells were assigned to group 3 ('interstitial mesenchymal cell'). However, our re-analysis suggests it is somewhat a larger with `r sum(M$cluster == 2)` cells in total. These cells were identified as mesenchymal cells as they expressed PDGFRA and SPHK1 in high abundances. We can look to see whether in our cell set we've identified more cells that are potentially contamination:
+
+```{r cont1, fig.align='center', cache=TRUE}
+M_cont <- filter(M, cluster == 2)
+M_cont$cluster <- 3
+print(table(M_cont$cluster, M_cont$monocle_state))
+```
+So the classifications agree on 60 of the cells but disagree on the other 51. Note that the differences in classification are really driven by the reduced geometry rather than the classification algorithm. 
+
+What we'd like to do is see how the gene markers compare when considering the contamined cells identified by monocle, the contaminated cells we identify, and all other cells:
+```{r cont2, fig.align='center', cache=TRUE, message=FALSE, warning=FALSE}
+M$agree_contamination <- apply(M, 1, function(x) {
+  if(x['monocle_state'] == 3 & x['cluster'] == 2) {
+     return('agree_cont')
+  } else if(x['monocle_state'] != 3 & x['cluster'] == 2) {
+    return('embeddr_only')
+  }  else if(x['monocle_state'] == 3 & x['cluster'] != 3) {
+      return('monocle_only')
+  } else {
+    return('non_cont')
+  } 
+})
+
+cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("PDGFRA", "SPHK1")))
+short_names <- fData(HSMM)[cont_genes,]$gene_short_name
+y <- log(exprs(HSMM[cont_genes,]) + 1)
+y <- scale(t(y))
+y <- data.frame(y)
+y <- melt(y, variable.name='gene', value.name='counts')
+y$gene <- mapvalues(y$gene, from = cont_genes, to = short_names)
+y$agree_contamination <- M$agree_contamination
+ggplot(y, aes(x=factor(agree_contamination), fill=factor(agree_contamination), y=counts)) + 
+  facet_wrap(~gene) + scale_fill_discrete(guide=FALSE) +
+  geom_boxplot() + theme_bw() + xlab('') +
+  scale_x_discrete(labels=c('Contamination agree','Embeddr only','Monocle only','No contamination')) +
+  theme(axis.text.x = element_text(angle = -90, hjust=0))
+```
+
+So it looks like they might have missed a few expressing PDGFRA, though it's consistent across SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
+```{r markers-in-space, cache=T, fig.width=8, fig.height=6, fig.align='center'}
+y <- log(exprs(HSMM[cont_genes,]) + 1)
+y <- scale(t(y))
+y <- data.frame(y)
+M_y <- cbind(M, y)
+M_y_melted <- melt(M_y, id.vars=names(M), variable.name='gene', value.name='count')
+M_y_melted$gene <- mapvalues(M_y_melted$gene, from = cont_genes, to = short_names)
+ggplot(M_y_melted, aes(x=component_1, y=component_2, size=2*count, color=factor(monocle_state))) + 
+  geom_point(alpha=0.7) + facet_wrap(~ gene) + theme_bw()
+```
+

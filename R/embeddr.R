@@ -82,8 +82,9 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
     M <- eig$vectors[,(l-1):(l-p)]  
   }
   colnames(M) <- paste('component_', 1:p, sep='')
-  rownames(M) <- colnames(W)
-  return( data.frame(M) )
+  M <- data.frame(M)
+  M$cell_id <- colnames(W)
+  return( M )
 }
 
 #' Plot the degree distribution of the weight matrix
@@ -129,6 +130,9 @@ fit_pseudotime <- function(M, clusters=NULL) {
 
 plot_embedding <- function(M, color_by = 'cluster') {
   library(ggplot2)
+  
+  if('pseudotime' %in% names(M)) M <- arrange(M, pseudotime)
+  
   plt <- ggplot(data=M) + theme_bw()
   if(color_by %in% names(M)) {
     if(color_by == 'pseudotime') {
@@ -153,4 +157,27 @@ plot_embedding <- function(M, color_by = 'cluster') {
     plt <- plt + geom_point(aes(x = component_1, y = component_2))
   }
   return( plt )
+}
+
+plot_in_pseudotime <- function(Mp, xp, genes, short_names, nrow = NULL, ncol = NULL) {
+  xp <- data.frame(t(xp))
+  xp <- select(xp, one_of(genes))
+  names(xp) <- short_names
+  xp$pseudotime <- Mp$pseudotime
+  df_x <- melt(xp, id.vars='pseudotime', variable.name='gene', value.name='counts')
+  ggplot(data=df_x, aes(x=pseudotime, y=counts)) + geom_point() +
+    theme_bw() + geom_smooth(method='loess') + facet_wrap(~ gene, nrow = nrow, ncol = ncol) +
+    ylab('Normalised log10(FPKM)')
+}
+
+#' Reverse pseudotime
+#' 
+#' Reverse the pseudotimes of cells
+#' 
+#' @param M A dataframe containing a pseudotime variable to be reversed
+#' @return A dataframe with the reversed pseudotime
+reverse_pseudotime <- function(M) {
+  reverse <- function(x) -x + max(x) + min(x)
+  M$pseudotime <- reverse(M$pseudotime)
+  return( M )
 }
