@@ -105,15 +105,20 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 }
 
 cluster_embedding <- function(M, k = 3) {
-  km <- kmeans(M, 3)
+  library(dplyr)
+  M_xy <- select(M, component_1, component_2)
+  km <- kmeans(M_xy, k)
   M$cluster <- km$cluster
   return( M )
 }
 
-fit_curve <- function(M, clusters=NULL) {
+fit_pseudotime <- function(M, clusters=NULL) {
   library(dplyr)
   library(princurve)
-  Mp <- filter(M, cluster %in% clusters)
+  Mp <- M
+  
+  if(!is.null(clusters)) Mp <- filter(M, cluster %in% clusters)
+  
   pc <- principal.curve(as.matrix(select(Mp, component_1, component_2)))
   Mp$pseudotime <- pc$lambda
   Mp$trajectory_1 <- pc$s[,1]
@@ -124,7 +129,7 @@ fit_curve <- function(M, clusters=NULL) {
 
 plot_embedding <- function(M, color_by = 'cluster') {
   library(ggplot2)
-  plt <- ggplot(data=M) + theme_bw(base_size=14)
+  plt <- ggplot(data=M) + theme_bw()
   if(color_by %in% names(M)) {
     if(color_by == 'pseudotime') {
       mapping_str <- color_by
