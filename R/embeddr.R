@@ -170,6 +170,7 @@ fit_pseudotime <- function(M, clusters=NULL) {
 #' @return A \code{ggplot2} plot
 plot_embedding <- function(M, color_by = 'cluster') {
   library(ggplot2)
+  library(ggthemes)
   
   if('pseudotime' %in% names(M)) M <- arrange(M, pseudotime)
   
@@ -217,8 +218,8 @@ plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, n
   if(!is.null(short_names)) names(xp) <- short_names
   xp$pseudotime <- Mp$pseudotime
   df_x <- melt(xp, id.vars='pseudotime', variable.name='gene', value.name='counts')
-  ggplot(data=df_x, aes(x=pseudotime, y=counts)) + geom_point() +
-    theme_bw() + geom_smooth(method='loess') + facet_wrap(~ gene, nrow = nrow, ncol = ncol) +
+  ggplot(data=df_x, aes(x=pseudotime, y=counts)) + geom_point(size=1.5, alpha=0.5) +
+    theme_bw() + geom_smooth(method='loess', color='firebrick') + facet_wrap(~ gene, nrow = nrow, ncol = ncol) +
     ylab('Normalised log10(FPKM)')
 }
 
