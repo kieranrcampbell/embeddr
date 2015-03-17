@@ -235,8 +235,8 @@ M_y <- cbind(M, y)
 M_y_melted <- melt(M_y, id.vars=names(M), variable.name='gene', value.name='count')
 M_y_melted$gene <- mapvalues(M_y_melted$gene, from = cont_genes, to = short_names)
 ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(cluster))) + 
-  geom_point(alpha=0.7) + facet_wrap(~ gene) + theme_bw() +
-  scale_color_discrete(name='cluster') + scale_color_fivethirtyeight()
+  geom_point(alpha=0.6) + facet_wrap(~ gene) + theme_bw() +
+  scale_color_fivethirtyeight(name='cluster') + scale_size_continuous(name='log10(count)')
 ```
 
 

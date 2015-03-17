@@ -130,6 +130,38 @@ cluster_embedding <- function(M, k = 3, method=c('kmeans','mm')) {
   return( M )
 }
 
+
+fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
+  library(dplyr)
+  library(igraph)
+  library(Matrix)
+  load_all("/net/isi-scratch/kieran/embeddr/curver/")
+
+  Mp <- M
+  if(!is.null(clusters)) Mp <- filter(Mp, cluster %in% clusters)
+  Y <- curver::reconstruct(select(Mp, component_1, component_2))
+  
+  D <- as.matrix(dist(Y))
+  g <- graph.adjacency(D, weighted=TRUE, mode='undirected')
+  g_mst <- minimum.spanning.tree(g)
+  A <- as.matrix(get.adjacency(g_mst))
+  endpoints <- which(rowSums(A) == 1)
+  ordering <- get.shortest.paths(g_mst, from=endpoints[1], to=endpoints[2])
+  Z <- Y[ordering$vpath[[1]],]
+  
+  ## now we have the ordering want to work out the arc-length
+  n <- dim(Z)[1]
+  Z_start <- Z[1:n-1,]
+  Z_end <- Z[2:n,]
+  Z_diff <- Z_end - Z_start
+  pst <- sqrt(rowSums(Z_diff^2))
+  pseudotime <- c(0, cumsum(pst))
+  Mp$pseudotime <- pseudotime[invPerm(as.integer(ordering$vpath[[1]]))]
+  Mp$trajectory_1 <- Y[,1]
+  Mp$trajectory_2 <- Y[,2]
+  return(Mp)
+}
+
 #' Fit the pseudotime curve
 #' 
 #' Fits the pseudotime curve using principal curves from the princurve library
@@ -143,14 +175,12 @@ cluster_embedding <- function(M, k = 3, method=c('kmeans','mm')) {
 #' \item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve)}
 #' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
-fit_pseudotime <- function(M, clusters=NULL) {
+fit_pseudotime <- function(M, clusters = NULL) {
   library(dplyr)
   library(princurve)
   Mp <- M
-  
   if(!is.null(clusters)) Mp <- filter(M, cluster %in% clusters)
-  
-  pc <- principal.curve(as.matrix(select(Mp, component_1, component_2)))
+  pc <- principal.curve(x = as.matrix(select(Mp, component_1, component_2)), ...)
   Mp$pseudotime <- pc$lambda
   Mp$trajectory_1 <- pc$s[,1]
   Mp$trajectory_2 <- pc$s[,2]
@@ -170,9 +200,9 @@ fit_pseudotime <- function(M, clusters=NULL) {
 #' @return A \code{ggplot2} plot
 plot_embedding <- function(M, color_by = 'cluster') {
   library(ggplot2)
-  library(ggthemes)
   
   if('pseudotime' %in% names(M)) M <- arrange(M, pseudotime)
+  if(!('cluster' %in% names(M))) color_by <- 'pseudotime'
   
   plt <- ggplot(data=M) + theme_bw()
   if(color_by %in% names(M)) {
@@ -233,4 +263,12 @@ reverse_pseudotime <- function(M) {
   reverse <- function(x) -x + max(x) + min(x)
   M$pseudotime <- reverse(M$pseudotime)
   return( M )
+}
+
+plot_heatmap(M, x) {
+  library(gplots)
+  xp <- x[,order(M$pseudotime)]
+    
+  heatmap.2(xp, dendrogram="row", Colv=FALSE,
+            col=redblue(256), trace="none", density.info="none")
 }

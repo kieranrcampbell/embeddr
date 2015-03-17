@@ -10,4 +10,8 @@ Imports:
   ggplot2,
   princurve,
   plyr,
-  dplyr
+  dplyr,
+  mclust,
+  igraph,
+  Matrix,
+  gplots
