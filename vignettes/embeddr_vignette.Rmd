@@ -83,10 +83,13 @@ genes_for_fit <- x_mean > 0.3
 CV2 <- x_var[genes_for_fit] / (x_mean[genes_for_fit])^2
 df_fit <- data.frame(m = x_mean[genes_for_fit], CV2 = CV2)
 fit_loglin <- nls(CV2 ~ a * 10^(-k * m), data = df_fit, start=c(a=5, k=1)) 
+ak <- coef(fit_loglin)
+f <- function(x) ak[1] * 10^(-ak[2] * x) 
 genes_for_embedding <- (CV2 > 4 * predict(fit_loglin))
 df_fit$for_embedding <- as.factor(genes_for_embedding)
 ggplot(df_fit, aes(x=m, y=CV2, color = for_embedding)) + geom_point() +
-  theme_bw() + xlab('Mean') + ylab('CV2') + scale_color_fivethirtyeight()
+  theme_bw() + xlab('Mean') + ylab('CV2') + scale_color_fivethirtyeight() +
+  stat_function(fun=f, color='black')
 ```
 
 Once we have picked the genes we want to use for the embedding, we scale them to treat them as equal to avoid high magnitude outliers driving the embedding:
@@ -149,7 +152,8 @@ qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime) 
   theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
 ```
 
-The overall correlation between the two pseudotime trajectories is `r format(round(cor(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime),2), nsmall=2)`, which is pretty good.
+The overall correlation between the two pseudotime trajectories is `r format(round(cor(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime),2), nsmall=2)`, which is pretty good. 
+
 
 ### Plotting genes in pseudotime
 
@@ -166,6 +170,13 @@ plot_in_pseudotime(Mp, xp, genes_to_plot, gene_short_names)
 ```
 
 which is largely similar to the monocle equivalent.
+
+We can also plot a heatmap of all the genes in pseudotime:
+
+```{r heatmap, fig.align='center', fig.width=8.5,fig.height=6, message=FALSE}
+plot_heatmap(Mp, x)
+```
+
 
 ### Robustness to choice of nearest neighbours
 

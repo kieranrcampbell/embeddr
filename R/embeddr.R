@@ -68,12 +68,13 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
   L  <- diag(rowSums(W)) - W
   l <- nrow(L)
   M <- NULL # object to be returned
+  eig <- NULL # eigenvectors/values
   
   if(type == 'norm') {
     Ds <- diag(1/sqrt(rowSums(W)))
     L_sym <- Ds %*% L %*% Ds
     eig <- eigen(L_sym, symmetric=T) # values ordered in decreasing order
-    M <- diag(Ds) * eig$vectors[,(l-1):(l-p)]
+    M <- diag(Ds) * eig$vectors[,(l-1):(l-p)]  
   }
   if(type == 'unorm') {
     L  <- diag(rowSums(W)) - W
@@ -81,6 +82,9 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
     l <- nrow(L)
     M <- eig$vectors[,(l-1):(l-p)]  
   }
+  
+  if(sum(eig$values == 0) > 1) warning('More than one non-zero eigenvalue - disjoint clusters')
+
   colnames(M) <- paste('component_', 1:p, sep='')
   M <- data.frame(M)
   M$cell_id <- colnames(W)
@@ -139,14 +143,18 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 
   Mp <- M
   if(!is.null(clusters)) Mp <- filter(Mp, cluster %in% clusters)
-  Y <- curver::reconstruct(select(Mp, component_1, component_2))
+  Y <- curver::reconstruct(select(Mp, component_1, component_2), niter=1, h=0.2)
+  #Y <- curver::reconstruct(select(Mp, component_1, component_2), ...)
   
   D <- as.matrix(dist(Y))
   g <- graph.adjacency(D, weighted=TRUE, mode='undirected')
   g_mst <- minimum.spanning.tree(g)
   A <- as.matrix(get.adjacency(g_mst))
   endpoints <- which(rowSums(A) == 1)
-  ordering <- get.shortest.paths(g_mst, from=endpoints[1], to=endpoints[2])
+  ordering <- get.shortest.paths(g_mst, from=endpoints)
+  paths <- ordering$vpath
+  best_path <- paths[[ which.max(sapply(paths, length)) ]]
+  
   Z <- Y[ordering$vpath[[1]],]
   
   ## now we have the ordering want to work out the arc-length
@@ -175,7 +183,7 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' \item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve)}
 #' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
-fit_pseudotime <- function(M, clusters = NULL) {
+fit_pseudotime <- function(M, clusters = NULL, ...) {
   library(dplyr)
   library(princurve)
   Mp <- M
@@ -184,7 +192,7 @@ fit_pseudotime <- function(M, clusters = NULL) {
   Mp$pseudotime <- pc$lambda
   Mp$trajectory_1 <- pc$s[,1]
   Mp$trajectory_2 <- pc$s[,2]
-  Mp <- arrange(Mp, pseudotime)
+  #Mp <- arrange(Mp, pseudotime)
   return( Mp )
 }
 
@@ -243,6 +251,8 @@ plot_embedding <- function(M, color_by = 'cluster') {
 #'  
 #'  @return A \code{ggplot2} plot
 plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
+  library(reshape2)
+  if(ncol(xp) != nrow(Mp)) stop('xp must be gene-by-cell matrix')  
   xp <- data.frame(t(xp))
   xp <- select(xp, one_of(genes))
   if(!is.null(short_names)) names(xp) <- short_names
@@ -265,10 +275,10 @@ reverse_pseudotime <- function(M) {
   return( M )
 }
 
-plot_heatmap(M, x) {
+plot_heatmap <- function(M, x, ...) {
   library(gplots)
   xp <- x[,order(M$pseudotime)]
     
-  heatmap.2(xp, dendrogram="row", Colv=FALSE,
-            col=redblue(256), trace="none", density.info="none")
+  heatmap.2(xp, dendrogram="none", Colv=FALSE,
+            col=redblue(256), trace="none", density.info="none", scale="row", ...)
 }
