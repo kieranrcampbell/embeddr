@@ -285,13 +285,33 @@ plot_heatmap <- function(M, x, ...) {
 }
 
 plot_graph <- function(M, W) {
-  library(igraph)
-  library(dplyr)
-  loc <- as.matrix(select(M, component_1, component_2))  
+  df <- select(M, x = component_1, y = component_2)
+  
   diag(W) <- 0
-  g <- graph.adjacency(W, mode='undirected', weighted=TRUE)
-  plot(g, vertex.size=2, vertex.label=NA, layout=loc)
+  locs <- which(W > 0, arr.ind = TRUE)
+  from_to <- apply(locs, 1, function(xy) {
+    xy_from <- df[xy[1],]
+    xy_to <- df[xy[2],]
+    xx <- c(xy_from, xy_to)
+    ##print(class(xx))
+    names(xx) <- c('x_from','y_from','x_to','y_to')
+    unlist(xx)
+  })
+  from_to <- data.frame(t(from_to))
+  
+  plt <- ggplot() + 
+    geom_segment(data=from_to, aes(x=x_from, xend=x_to, y=y_from, yend=y_to), 
+                 alpha=0.5, color='grey', linetype=2) +
+        theme_minimal() 
+  if('cluster' %in% names(M)) {
+    df$cluster <- M$cluster
+    plt <- plt + geom_point(data=df, aes(x=x,y=y,color=as.factor(cluster))) 
+  } else {
+    plt <- plt + geom_point(data=df, aes(x=x,y=y))
+  }
+  plt
 }
+
 
 
 
