@@ -253,6 +253,7 @@ plot_embedding <- function(M, color_by = 'cluster') {
 plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
   library(reshape2)
   if(ncol(xp) != nrow(Mp)) stop('xp must be gene-by-cell matrix')  
+
   xp <- data.frame(t(xp))
   xp <- select(xp, one_of(genes))
   if(!is.null(short_names)) names(xp) <- short_names
@@ -282,3 +283,17 @@ plot_heatmap <- function(M, x, ...) {
   heatmap.2(xp, dendrogram="none", Colv=FALSE,
             col=redblue(256), trace="none", density.info="none", scale="row", ...)
 }
+
+plot_graph <- function(M, W) {
+  library(igraph)
+  library(dplyr)
+  loc <- as.matrix(select(M, component_1, component_2))  
+  diag(W) <- 0
+  g <- graph.adjacency(W, mode='undirected', weighted=TRUE)
+  plot(g, vertex.size=2, vertex.label=NA, layout=loc)
+}
+
+
+
+
+
