@@ -16,12 +16,22 @@
 #' @param nn Number of nearest neighbours if kernel == 'nn'
 #' @param eps Maximum distance parameter if kernel == 'dist'
 #' @param t 'time' for heat kernel if kernel == 'heat'
+#' @param symmetrize How to make the adjacency matrix symmetric. Note that slightly 
+#' counterintuitively, node i having node j as a nearest neighbour doesn't guarantee node
+#' j has node i. There are several ways to get round this:
+#' \itemize{
+#' \item \code{mean} If the above case occurs make the link weight 0.5 so the adjacency matrix becomes \eqn{0.5(A + A')}
+#' \item \code{ceil} If the above case occurs set the link weight to 1 (ie take the ceiling of the mean case)
+#' \item \code{floor} If the above case occurs set the link weight to 0 (ie take the floor of the mean case)
+#' } 
 #' 
 #' @return An n by n adjacency matrix
 weighted_graph <- function(x, kernel=c('nn','dist','heat'), 
-                           nn = 20, eps = NULL, t = NULL) {
+                           nn = 20, eps = NULL, t = NULL,
+                           symmetrize = c('mean','ceil','floor')) {
   ## sanity checking
   kernel <- match.arg(kernel)
+  symmetrize <- match.arg(symmetrize)
   
   ## compute distance matrix
   dm <- as.matrix(dist(t(x)))
@@ -37,6 +47,11 @@ weighted_graph <- function(x, kernel=c('nn','dist','heat'),
     })
     ## symmetrise as A -> B => B -> A
     W <- 0.5 * (W + t(W))
+    if(symmetrize == 'ceil') {
+      W <- ceiling(W)
+    } else if(symmetrize == 'floor') {
+      W <- floor(W)
+    }
   }
   
   if(kernel == 'heat') {
@@ -83,7 +98,7 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
     M <- eig$vectors[,(l-1):(l-p)]  
   }
   
-  if(sum(eig$values == 0) > 1) warning('More than one non-zero eigenvalue - disjoint clusters')
+  if(sum(eig$values == 0) > 1) warning(paste('More than one non-zero eigenvalue - disjoint clusters. Multiplicity: ', sum(eig$values == 0)))
 
   colnames(M) <- paste('component_', 1:p, sep='')
   M <- data.frame(M)
@@ -121,7 +136,7 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 cluster_embedding <- function(M, k = 3, method=c('kmeans','mm')) {
   library(dplyr)
-  M_xy <- select(M, component_1, component_2)
+  M_xy <- dplyr::select(M, component_1, component_2)
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
@@ -187,8 +202,8 @@ fit_pseudotime <- function(M, clusters = NULL, ...) {
   library(dplyr)
   library(princurve)
   Mp <- M
-  if(!is.null(clusters)) Mp <- filter(M, cluster %in% clusters)
-  pc <- principal.curve(x = as.matrix(select(Mp, component_1, component_2)), ...)
+  if(!is.null(clusters)) Mp <- dplyr::filter(M, cluster %in% clusters)
+  pc <- principal.curve(x = as.matrix(dplyr::select(Mp, component_1, component_2)), ...)
   Mp$pseudotime <- pc$lambda
   Mp$trajectory_1 <- pc$s[,1]
   Mp$trajectory_2 <- pc$s[,2]
@@ -252,10 +267,11 @@ plot_embedding <- function(M, color_by = 'cluster') {
 #'  @return A \code{ggplot2} plot
 plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
   library(reshape2)
+  library(dplyr)
   if(ncol(xp) != nrow(Mp)) stop('xp must be gene-by-cell matrix')  
 
   xp <- data.frame(t(xp))
-  xp <- select(xp, one_of(genes))
+  xp <- dplyr::select(xp, one_of(genes))
   if(!is.null(short_names)) names(xp) <- short_names
   xp$pseudotime <- Mp$pseudotime
   df_x <- melt(xp, id.vars='pseudotime', variable.name='gene', value.name='counts')
@@ -285,10 +301,11 @@ plot_heatmap <- function(M, x, ...) {
 }
 
 plot_graph <- function(M, W) {
+  library(plyr)
   df <- select(M, x = component_1, y = component_2)
   
   diag(W) <- 0
-  locs <- which(W > 0, arr.ind = TRUE)
+  locs <- which((1 * lower.tri(W) * W) > 0, arr.ind = TRUE)
   from_to <- apply(locs, 1, function(xy) {
     xy_from <- df[xy[1],]
     xy_to <- df[xy[2],]
@@ -297,23 +314,68 @@ plot_graph <- function(M, W) {
     names(xx) <- c('x_from','y_from','x_to','y_to')
     unlist(xx)
   })
+  colnames(from_to) <- NULL
   from_to <- data.frame(t(from_to))
+  from_to$connect <- plyr::mapvalues(W[locs], c(0.5, 1), c('Single','Both'))
+  cols <- c('Single' = 'grey', 'Both' = 'red')
   
   plt <- ggplot() + 
-    geom_segment(data=from_to, aes(x=x_from, xend=x_to, y=y_from, yend=y_to), 
-                 alpha=0.5, color='grey', linetype=2) +
-        theme_minimal() 
-  if('cluster' %in% names(M)) {
-    df$cluster <- M$cluster
-    plt <- plt + geom_point(data=df, aes(x=x,y=y,color=as.factor(cluster))) 
-  } else {
-    plt <- plt + geom_point(data=df, aes(x=x,y=y))
-  }
+    geom_segment(data=from_to, aes(x=x_from, xend=x_to, y=y_from, yend=y_to, color=connect), 
+                 alpha=0.5, linetype=1) +
+        theme_minimal() + scale_color_manual(values = cols) + geom_point(data=df, aes(x=x,y=y))
+  plt + xlab('x') + ylab('y')
   plt
 }
 
+## expression~VGAM::bs(Pseudotime, df=3)
 
+#' Fit the gene expression profile in pseudotime
+#' 
+#' This function fits the expression profile of y as a function of
+#' pseudotime using a natural cubic spline of degree three. A tobit model
+#' is used to censor values less than min_expr
+#' 
+#' @return An object of class VGAM
+fit_pseudotime_model <- function(y, t, min_expr) {
+  b <- ns(t, df=3)
+  fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
+  return( fit )
+}
 
+#' Fit the null pseudotime model
+#' 
+#' This function fits the null expression profile in y (ie y ~ 1). A tobit model is
+#' used to censor values less than min_expr
+#' 
+#'  @return An object of class VGAM 
+fit_null_model <- function(y, min_expr) {
+  suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
+}
 
+#' Plot the fit in pseudotime
+#' 
+#' @param model Model returned by \code{fit_pseudotime_model} or \code{fit_null_model}
+#' @param y A vector gene expression of length number of cells 
+#' @param t The assigned pseudotime
+#' @param min_expr The minimum expression detection threshold
+#' 
+#' @return An plot object from \code{ggplot}
+plot_pseudotime_fit <- function(model, y, t, min_expr) {
+  df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = min_expr)
+  
+  ggplot(df) + geom_point(aes(x=t, y=y)) + geom_line(aes(x=t,y=p, color='Predicted')) +
+    theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
+    scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red'))
+}
 
+#' Perform likelihood ratio test
+#' 
+#' @param model The full model y ~ pseudotime
+#' @param null_model The null model y ~ 1
+#' 
+#' @return The p-value
+compare_models <- function(model, null_model) {
+  lrt <- VGAM::lrtest(model, null_model)
+  return( lrt@Body["Pr(>Chisq)"][2, ] )
+}
 

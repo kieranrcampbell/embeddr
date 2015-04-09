@@ -15,4 +15,5 @@ Imports:
   igraph,
   Matrix,
   gplots,
-  reshape2
+  reshape2,
+  VGAM
