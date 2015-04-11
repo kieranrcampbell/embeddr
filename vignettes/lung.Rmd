@@ -109,10 +109,13 @@ t <- M1$pseudotime
 y <- dd[,'Fabp5']
 min_expr <- 0 # see paper
 
+print(M1$cluster)
+
 model <- fit_pseudotime_model(y, t, min_expr)
 null_model <- fit_null_model(y, min_expr)
 p_val <- compare_models(model, null_model)
 plot_pseudotime_model(model, y, t, min_expr) + ggtitle('Fabp5 expression in pseudotime')
+
 ```
 
 

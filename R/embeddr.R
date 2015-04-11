@@ -376,19 +376,22 @@ fit_null_model <- function(y, min_expr) {
 #' @param y A vector gene expression of length number of cells 
 #' @param t The assigned pseudotime
 #' @param min_expr The minimum expression detection threshold
+#' @clusters Any clustering by cell type
 #' 
 #' @return An plot object from \code{ggplot}
 plot_pseudotime_model <- function(model, y, t, min_expr) {
   df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = min_expr)
   
-  ggplot(df) + geom_point(aes(x=t, y=y)) + geom_line(aes(x=t,y=p, color='Predicted')) +
+  plt <- ggplot(df)  + geom_line(aes(x=t,y=p, color='Predicted')) +
     theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
     scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red'))
+  plt <- plt + geom_point(aes(x=t, y=y))
+  return( plt )
 }
 
-plot_pseudotime_models <- function(models, x, min_expr) {
-  
-}
+# plot_pseudotime_models <- function(models, x, min_expr) {
+#   
+# }
 
 
 #' Perform likelihood ratio test
