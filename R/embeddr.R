@@ -134,7 +134,7 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' @param method Either 'kmeans' or 'mm' to use \code{mclust}
 #' 
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
-cluster_embedding <- function(M, k = 3, method=c('kmeans','mm')) {
+cluster_embedding <- function(M, k = NULL, method=c('kmeans','mm')) {
   library(dplyr)
   M_xy <- dplyr::select(M, component_1, component_2)
   method <- match.arg(method)
@@ -144,11 +144,10 @@ cluster_embedding <- function(M, k = 3, method=c('kmeans','mm')) {
   } else if(method == 'mm') {
     library(mclust)
     mc <- Mclust(M_xy, G=k)
-    M$cluster <- mc$classification
+    M$cluster <- as.factor(mc$classification)
   }
   return( M )
 }
-
 
 fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
   library(dplyr)
@@ -274,10 +273,24 @@ plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, n
   xp <- dplyr::select(xp, one_of(genes))
   if(!is.null(short_names)) names(xp) <- short_names
   xp$pseudotime <- Mp$pseudotime
-  df_x <- melt(xp, id.vars='pseudotime', variable.name='gene', value.name='counts')
-  ggplot(data=df_x, aes(x=pseudotime, y=counts)) + geom_point(size=1.5, alpha=0.5) +
+  
+  cn <- 'cluster' %in% names(Mp)
+  if(cn) xp$cluster <- Mp$cluster
+  id_vars <- 'pseudotime'
+  if(cn) id_vars <- c(id_vars, 'cluster')
+  
+  df_x <- melt(xp, id.vars=id_vars, variable.name='gene', value.name='counts')
+  
+  plt <- NULL
+  if(cn) {
+    plt <- ggplot(data=df_x, aes(x=pseudotime, y=counts, color=cluster)) 
+  } else {
+    plt <- ggplot(data=df_x, aes(x=pseudotime, y=counts))
+  }
+    
+  return( plt + geom_point(size=1.5) +
     theme_bw() + geom_smooth(method='loess', color='firebrick') + facet_wrap(~ gene, nrow = nrow, ncol = ncol) +
-    ylab('Normalised log10(FPKM)')
+    ylab('Normalised log10(FPKM)') )
 }
 
 #' Reverse pseudotime
