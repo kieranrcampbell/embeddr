@@ -338,7 +338,12 @@ plot_graph <- function(M, W) {
 #' @return An object of class VGAM
 fit_pseudotime_model <- function(y, t, min_expr) {
   b <- ns(t, df=3)
-  fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
+  fit <- NULL
+  tryCatch({
+    fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
+  }, error = function(e) {
+    fit <- NULL
+  })
   return( fit )
 }
 
@@ -360,13 +365,18 @@ fit_null_model <- function(y, min_expr) {
 #' @param min_expr The minimum expression detection threshold
 #' 
 #' @return An plot object from \code{ggplot}
-plot_pseudotime_fit <- function(model, y, t, min_expr) {
+plot_pseudotime_model <- function(model, y, t, min_expr) {
   df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = min_expr)
   
   ggplot(df) + geom_point(aes(x=t, y=y)) + geom_line(aes(x=t,y=p, color='Predicted')) +
     theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
     scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red'))
 }
+
+plot_pseudotime_models <- function(models, x, min_expr) {
+  
+}
+
 
 #' Perform likelihood ratio test
 #' 

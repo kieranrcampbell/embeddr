@@ -1,0 +1,169 @@
+---
+title: "Pseudotemporal ordering of cells from the distal lung epithelium"
+author: "Kieran Campbell"
+date: "03/24/2015"
+output: html_document
+---
+
+Initial data processing: first we read in the data and remove bulk transcripts:
+
+```{r load-lib, message=FALSE}
+library(dplyr)
+library(devtools)
+library(data.table)
+library(ggplot2)
+library(splines)
+library(VGAM)
+library(corrplot)
+load_all("/net/isi-scratch/kieran/embeddr/embeddr")
+```
+
+```{r load-data, cache=TRUE}
+d <- fread("data.txt")
+
+## want to remove bulk samples
+bulk_i <- which(d$putative_cell_type == 'bulk')
+d <- d[-bulk_i,]
+
+d_numeric <- select(d, -cell_name, -time_point, -sample, -putative_cell_type)
+```
+
+Next we want to fit a noise model to find highly variable genes:
+```{r noise-model, cache=TRUE, fig.align='center'}
+Lmeans <- colMeans(d_numeric)
+Lvars <- apply(d_numeric, 2, var)
+
+to_use <- Lmeans > 0.5 & Lvars > 0 
+
+LCV <- Lvars[to_use] / Lmeans[to_use]^2
+
+df_var <- data.frame(CV2 = LCV, m=Lmeans[to_use])
+
+fit_loglin <- nls(CV2 ~ a + b / m, data = df_var, start=c(a=80, b=5)) 
+
+f <- function(x) coef(fit_loglin)[1] + coef(fit_loglin)[2] / x
+
+is_het <- LCV > 1.5 * predict(fit_loglin)
+df_var$is_het <- is_het
+
+ggplot(df_var, aes(x=m, y=CV2, color=is_het)) + geom_point() +
+  stat_function(fun=f, color='black') + theme_bw()
+
+het_genes <- names(which(is_het))
+het_indices <- match(het_genes, names(d_numeric))
+
+
+d_het <- t(d_numeric[,het_indices,with=FALSE])
+```
+
+Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
+
+```{r le1, cache=TRUE, fig.align='center', message=FALSE, warning=FALSE}
+d_het <- t(d_numeric[,het_indices,with=FALSE])
+W <- weighted_graph(d_het, nn=15)
+M <- laplacian_eigenmap(W, type='unorm')
+
+M$cluster <- d$putative_cell_type
+plot_embedding(M)
+plot_graph(M, W)
+```
+
+It is obvious we have two very separate trajectories; let's consider the pseudotemporal ordering of one only:
+
+```{r cluster-plot, cache=TRUE, fig.align='center', message=FALSE}
+M <- cluster_embedding(M, k=2, method='mm')
+
+cl1 <- M$cluster == 1
+M1 <- filter(M, cl1)
+
+M1 <- fit_pseudotime(M1)
+
+plot_embedding(M1)
+```
+
+We can also plot genes in pseudotime:
+
+```{r plot-ps, cache=TRUE, fig.align='center'}
+dd_tmp <- data.frame(d_het[,cl1])
+plot_in_pseudotime( M1, dd_tmp, genes='Fabp5' )
+```
+
+Before continuing we need to remove some genes with zero variance in the 1 section only:
+```{r remove-zero-var, cache=TRUE}
+## need to remove Lypd2, Upk3a
+toremove <- which(apply(dd_tmp, 1, function(x) var(x) == 0))
+dd <- dd_tmp[-toremove,]
+dd <- t(dd)
+rownames(dd) <- NULL
+print(dim(dd))
+```
+
+We can also fit a pseudotime cubic smoothing spline regression to `Fabp5`:
+
+```{r plot-fap, cache=TRUE, fig.align='center', fig.width=5.5, fig.height=3.5}
+t <- M1$pseudotime
+y <- dd[,'Fabp5']
+min_expr <- 0 # see paper
+
+model <- fit_pseudotime_model(y, t, min_expr)
+null_model <- fit_null_model(y, min_expr)
+p_val <- compare_models(model, null_model)
+plot_pseudotime_model(model, y, t, min_expr) + ggtitle('Fabp5 expression in pseudotime')
+```
+
+We can now perform some statistical tests to see which genes vary significantly in pseudotime:
+
+```{r vary-sig, cache=TRUE}
+test_gene <- function(y, t, min_expr) {
+  tryCatch({
+  model <- fit_pseudotime_model(y, t, min_expr)
+  null_model <- fit_null_model(y, min_expr)
+  return( compare_models(model, null_model) )
+  }, error = function(e) {
+    return( 1 ) # if there's an error, just return 1
+  })
+}
+
+all_genes <- data.frame(d_numeric[cl1, ])
+uniform_zero <- which(colSums(all_genes) == 0)
+all_genes_nonzero  <- all_genes[,-uniform_zero]
+sig_tests <- apply(all_genes_nonzero, 2, test_gene, t, min_expr)
+
+```
+
+Plot the p-values:
+
+```{r plot-pval, fig.align='center', cache=TRUE}
+qplot(sig_tests) + theme_minimal()
+```
+
+Adjust the p-values to find significantly varying ones:
+
+```{r sig-vary, cache=TRUE}
+adj_sigs <- p.adjust(sig_tests, method='BH')
+
+alpha <- 0.01
+sig_genes <- names(which(adj_sigs < alpha))
+sg <- adj_sigs[adj_sigs < alpha]
+```
+
+Plot correlations of genes across pseudotime:
+```{r plot-corr, fig.align='center'}
+df_cor <- all_genes[,sig_genes]
+gene_cor <- cor(df_cor)
+corrplot(gene_cor,order='hclust')
+```
+
+Look at directionality of genes by hierarchical clustering:
+```{r corr-clust, fig.align='center', cache=TRUE}
+dis <- 1 - gene_cor / 2
+ddis <- as.dist(dis)
+
+hc <- hclust(ddis)
+```
+
+Finally plot genes going up or down in pseudotime:
+```{r gene-up, fig.align='center', cache=TRUE}
+gene_groups <- cutree(hc, 2)
+plot_in_pseudotime(M1, t(all_genes), sig_genes[gene_groups == 1])
+```

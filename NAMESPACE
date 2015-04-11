@@ -1,3 +1,5 @@
 exportPattern("^[^\\.]")
 export(laplacian_eigenmap)
 export(weighted_graph)
+export(fit_pseudotime_model)
+export(fit_null_model)

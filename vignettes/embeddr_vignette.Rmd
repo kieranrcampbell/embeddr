@@ -96,10 +96,16 @@ Once we have picked the genes we want to use for the embedding, we scale them to
 
 ```{r embedding_highmag, cache=TRUE, fig.align='center', fig.width=6.5, fig.height=4.5}
 xe <- t((x[,names(which(genes_for_embedding))]))
-W <- weighted_graph(xe)
+W <- weighted_graph(xe, nn = 10)
 Me <- laplacian_eigenmap(W)
 Me$monocle_state <- M$monocle_state
 plot_embedding(Me, color_by = 'monocle_state')
+```
+
+We can view the graph of cells to see how connections between different parts form:
+
+```{r nn, cache=TRUE, fig.align='center', fig.width=6.5, fig.height=4.5}
+plot_graph(Me, W)
 ```
 
 We can also cluster the embedding using kmeans and plot:
