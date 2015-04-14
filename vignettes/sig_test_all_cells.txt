@@ -1,0 +1,78 @@
+We can also fit a pseudotime cubic smoothing spline regression to `Fabp5`:
+
+```{r plot-fap, cache=TRUE, fig.align='center', fig.width=5.5, fig.height=3.5}
+t <- M1$pseudotime
+y <- dd[,'Fabp5']
+min_expr <- 0 # see paper
+
+print(M1$cluster)
+
+model <- fit_pseudotime_model(y, t, min_expr)
+null_model <- fit_null_model(y, min_expr)
+p_val <- compare_models(model, null_model)
+plot_pseudotime_model(model, y, t, min_expr) + ggtitle('Fabp5 expression in pseudotime')
+
+```
+
+We can now perform some statistical tests to see which genes vary significantly in pseudotime:
+
+```{r vary-sig, cache=TRUE}
+test_gene <- function(y, t, min_expr) {
+  tryCatch({
+  model <- fit_pseudotime_model(y, t, min_expr)
+  null_model <- fit_null_model(y, min_expr)
+  return( compare_models(model, null_model) )
+  }, error = function(e) {
+    return( 1 ) # if there's an error, just return 1
+  })
+}
+
+all_genes <- data.frame(d_numeric[cl1, ])
+uniform_zero <- which(colSums(all_genes) == 0)
+all_genes_nonzero  <- all_genes[,-uniform_zero]
+sig_tests <- apply(all_genes_nonzero, 2, test_gene, t, min_expr)
+
+```
+
+Plot the p-values:
+
+```{r plot-pval, fig.align='center', cache=TRUE}
+qplot(sig_tests) + theme_minimal()
+```
+
+Adjust the p-values to find significantly varying ones:
+
+```{r sig-vary, cache=TRUE}
+adj_sigs <- p.adjust(sig_tests, method='BH')
+
+alpha <- 0.01
+sig_genes <- names(which(adj_sigs < alpha))
+sg <- adj_sigs[adj_sigs < alpha]
+```
+
+Plot correlations of genes across pseudotime:
+```{r plot-corr, fig.align='center', fig.width=9, fig.height=9}
+df_cor <- all_genes[,sig_genes]
+gene_cor <- cor(df_cor)
+corrplot(gene_cor,order='hclust')
+```
+
+Look at directionality of genes by hierarchical clustering:
+```{r corr-clust, fig.align='center', cache=TRUE, fig.width=9}
+dis <- 1 - gene_cor / 2
+ddis <- as.dist(dis)
+
+hc <- hclust(ddis)
+plot(hc)
+```
+
+Finally plot genes going up or down in pseudotime:
+```{r gene-up, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
+gene_groups <- cutree(hc, 2)
+plot_in_pseudotime(M1, t(all_genes), sig_genes[gene_groups == 1])
+```
+
+and the genes going down in pseudotime:
+```{r gene-down, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
+plot_in_pseudotime(M1, t(all_genes), sig_genes[gene_groups == 2])
+```

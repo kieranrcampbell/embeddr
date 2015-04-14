@@ -62,7 +62,7 @@ Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
 
 ```{r le1, cache=TRUE, fig.align='center', message=FALSE, warning=FALSE}
 d_het <- t(d_numeric[,het_indices,with=FALSE])
-W <- weighted_graph(d_het, nn=10)
+W <- weighted_graph(d_het, metric='correlation', nn=10)
 M <- laplacian_eigenmap(W, type='unorm')
 
 M$cluster <- d$putative_cell_type
@@ -92,30 +92,167 @@ plot_in_pseudotime( M1, dd_tmp, genes='Fabp5' )
 
 ```
 
-Before continuing we need to remove some genes with zero variance in the 1 section only:
+It appears cluster 2 corresponds to `BP` cells, while cluster 1 corresponds to `AT1` and cluster 3 corresponds to `AT2` cells. We'd ideally like to have a pseudotemporal ordering ofr cells as they transition from `BP` to `AT1` and a second transitioning from `BP` to `AT2`. Let's start with the first. From visual inspection there also appear to be some outlier cells mis-classified. Let's remove them before continuing also.
+
+```{r ps-1, cache=TRUE, fig.align='center'}
+M_bp_at1 <- filter(M, cluster %in% 1:2, component_1 > 0.04)
+M_bp_at1 <- fit_pseudotime(M_bp_at1)
+plot_embedding(M_bp_at1)
+```
+
+Now we need to get the gene expression matrix confined to the cells we've identified:
 ```{r remove-zero-var, cache=TRUE}
-## need to remove Lypd2, Upk3a
-toremove <- which(apply(dd_tmp, 1, function(x) var(x) == 0))
-dd <- dd_tmp[-toremove,]
-dd <- t(dd)
-rownames(dd) <- NULL
-print(dim(dd))
+bp_at1 <- M$cluster %in% 1:2 & M$component_1 > 0.04
+dd_bp_at1 <- data.frame(d_het[, bp_at1])
+plot_in_pseudotime( M_bp_at1, dd_bp_at1, genes='Fabp5' )
+
+## Remove zero variance genes
+print(dim(dd_bp_at1))
+toremove <- which(apply(dd_bp_at1, 1, function(x) var(x) == 0))
+dd_bp_at1 <- dd_bp_at1[-toremove,]
+dd_bp_at1 <- t(dd_bp_at1)
+rownames(dd_bp_at1) <- NULL
+print(dim(dd_bp_at1))
 ```
 
 We can also fit a pseudotime cubic smoothing spline regression to `Fabp5`:
 
 ```{r plot-fap, cache=TRUE, fig.align='center', fig.width=5.5, fig.height=3.5}
-t <- M1$pseudotime
-y <- dd[,'Fabp5']
+t <- M_bp_at1$pseudotime
+y <- dd_bp_at1[,'Fabp5']
 min_expr <- 0 # see paper
-
-print(M1$cluster)
 
 model <- fit_pseudotime_model(y, t, min_expr)
 null_model <- fit_null_model(y, min_expr)
 p_val <- compare_models(model, null_model)
 plot_pseudotime_model(model, y, t, min_expr) + ggtitle('Fabp5 expression in pseudotime')
+print(p_val)
+```
+
+We can then perform the same tests across all genes:
+
+```{r vary-sig-at1, cache=TRUE}
+test_gene <- function(y, t, min_expr) {
+  tryCatch({
+  model <- embeddr::fit_pseudotime_model(y, t, min_expr)
+  null_model <- embeddr::fit_null_model(y, min_expr)
+  return( embeddr::compare_models(model, null_model) )
+  }, error = function(e) {
+    return( 1 ) # if there's an error, just return 1
+  })
+}
+
+df_all_genes <- data.frame(d_numeric[bp_at1, ])
+toremove <- which(apply(df_all_genes, 2, function(x) var(x) == 0))
+df_all_genes_nonzero  <- df_all_genes[,-toremove]
+sig_tests <- apply(df_all_genes_nonzero, 2, test_gene, t, min_expr)
+```
+
+Plot the p-values:
+
+```{r plot-pval, fig.align='center', cache=TRUE, fig.width=5, fig.height=3.5}
+qplot(sig_tests) + theme_minimal()
+```
+
+Adjust the p-values to find significantly varying ones:
+
+```{r sig-vary, cache=TRUE}
+adj_sigs <- p.adjust(sig_tests, method='BH')
+
+alpha <- 0.01
+sig_genes <- names(which(adj_sigs < alpha))
+sg <- adj_sigs[adj_sigs < alpha]
+```
+
+Plot correlations of genes across pseudotime:
+```{r plot-corr, fig.align='center', fig.width=9, fig.height=9}
+df_cor <- df_all_genes[,sig_genes]
+gene_cor <- cor(df_cor)
+corrplot(gene_cor,order='hclust')
 
 ```
 
+Look at directionality of genes by hierarchical clustering:
+```{r corr-clust, fig.align='center', cache=TRUE, fig.width=9}
+dis <- 1 - gene_cor / 2
+ddis <- as.dist(dis)
+
+hc <- hclust(ddis)
+plot(hc)
+```
+
+Finally plot genes going up or down in pseudotime:
+```{r gene-up, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
+gene_groups <- cutree(hc, 3)
+plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 1])
+plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 2])
+plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 3])
+
+```
+
+Now let's do the same for the transition into AT2:
+
+```{r ps-2, cache=TRUE, fig.align='center'}
+M_bp_at2 <- filter(M, cluster %in% 2:3, component_1 > 0.04)
+M_bp_at2 <- fit_pseudotime(M_bp_at2)
+plot_embedding(M_bp_at2)
+M_bp_at2 <- reverse_pseudotime(M_bp_at2)
+```
+
+Now we need to get the gene expression matrix confined to the cells we've identified:
+```{r remove-zero-var-2, cache=TRUE}
+bp_at2 <- M$cluster %in% 2:3 & M$component_1 > 0.04
+dd_bp_at2 <- data.frame(d_het[, bp_at2])
+plot_in_pseudotime( M_bp_at2, dd_bp_at2, genes='Fabp5' )
+
+t <- M_bp_at2$pseudotime
+
+## Remove zero variance genes
+df_all_genes <- data.frame(d_numeric[bp_at2, ])
+toremove <- which(apply(df_all_genes, 2, function(x) var(x) == 0))
+df_all_genes_nonzero  <- df_all_genes[,-toremove]
+sig_tests <- apply(df_all_genes_nonzero + 1, 2, test_gene, t, min_expr + 1)
+```
+
+And another look at the p-values:
+
+```{r plot-pval-2, fig.align='center', cache=TRUE, fig.width=5, fig.height=3.5, warning=FALSE}
+qplot(sig_tests) + theme_minimal()
+```
+
+
+```{r sig-vary-2, cache=TRUE}
+adj_sigs <- p.adjust(sig_tests, method='BH')
+alpha <- 0.01
+sig_genes <- names(which(adj_sigs < alpha))
+sg <- adj_sigs[adj_sigs < alpha]
+
+```
+
+Plot correlations of genes across pseudotime:
+```{r plot-corr-2, fig.align='center', fig.width=9, fig.height=9}
+df_cor <- df_all_genes[,sig_genes]
+gene_cor <- cor(df_cor)
+corrplot(gene_cor,order='hclust')
+
+```
+
+Look at directionality of genes by hierarchical clustering:
+```{r corr-clust-2, fig.align='center', cache=TRUE, fig.width=9}
+dis <- 1 - gene_cor / 2
+ddis <- as.dist(dis)
+hc <- hclust(ddis)
+plot(hc)
+
+```
+
+```{r gene-pattern-2, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
+gene_groups <- cutree(hc, 3)
+plot_in_pseudotime(M_bp_at2, t(df_all_genes), sig_genes[gene_groups == 1])
+plot_in_pseudotime(M_bp_at2, t(df_all_genes), sig_genes[gene_groups == 2])
+plot_in_pseudotime(M_bp_at2, t(df_all_genes), sig_genes[gene_groups == 3])
+
+```
+
+So we see there are three main classes of genes: early downregulation, late downregulation and upregulation.
 

@@ -1,0 +1,56 @@
+We can now perform some statistical tests to see which genes vary significantly in pseudotime:
+
+```{r vary-sig, cache=TRUE}
+test_gene <- function(y, t, min_expr) {
+  tryCatch({
+  model <- fit_pseudotime_model(y, t, min_expr)
+  null_model <- fit_null_model(y, min_expr)
+  return( compare_models(model, null_model) )
+  }, error = function(e) {
+    return( 1 ) # if there's an error, just return 1
+  })
+}
+
+all_genes <- data.frame(d_numeric[cl1, ])
+uniform_zero <- which(colSums(all_genes) == 0)
+all_genes_nonzero  <- all_genes[,-uniform_zero]
+sig_tests <- apply(all_genes_nonzero, 2, test_gene, t, min_expr)
+
+```
+
+Plot the p-values:
+
+```{r plot-pval, fig.align='center', cache=TRUE}
+qplot(sig_tests) + theme_minimal()
+```
+
+Adjust the p-values to find significantly varying ones:
+
+```{r sig-vary, cache=TRUE}
+adj_sigs <- p.adjust(sig_tests, method='BH')
+
+alpha <- 0.01
+sig_genes <- names(which(adj_sigs < alpha))
+sg <- adj_sigs[adj_sigs < alpha]
+```
+
+Plot correlations of genes across pseudotime:
+```{r plot-corr, fig.align='center'}
+df_cor <- all_genes[,sig_genes]
+gene_cor <- cor(df_cor)
+corrplot(gene_cor,order='hclust')
+```
+
+Look at directionality of genes by hierarchical clustering:
+```{r corr-clust, fig.align='center', cache=TRUE}
+dis <- 1 - gene_cor / 2
+ddis <- as.dist(dis)
+
+hc <- hclust(ddis)
+```
+
+Finally plot genes going up or down in pseudotime:
+```{r gene-up, fig.align='center', cache=TRUE}
+gene_groups <- cutree(hc, 2)
+plot_in_pseudotime(M1, t(all_genes), sig_genes[gene_groups == 1])
+```

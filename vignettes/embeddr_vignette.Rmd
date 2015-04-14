@@ -41,7 +41,7 @@ dim(x)
 Laplacian eigenmaps require the specification of a nearest-neighbor graph. We can do this using `embeddr::weighted_graph()` using the default options of 20 nearest neighbours. Other options for creating the graph (such as distance measures and heat kernels) are also available.
 
 ```{r create-graph, cache=TRUE}
-W <- weighted_graph(x)
+W <- weighted_graph(x, metric='correlation')
 ```
 
 Then we can use `embeddr::laplacian_eigenmap` for the dimensionality reduction. By default this uses the normalized graph laplacian, though the unnormalised laplacian can also be used (see here for details).
@@ -96,7 +96,7 @@ Once we have picked the genes we want to use for the embedding, we scale them to
 
 ```{r embedding_highmag, cache=TRUE, fig.align='center', fig.width=6.5, fig.height=4.5}
 xe <- t((x[,names(which(genes_for_embedding))]))
-W <- weighted_graph(xe, nn = 10)
+W <- weighted_graph(xe, nn = 8)
 Me <- laplacian_eigenmap(W)
 Me$monocle_state <- M$monocle_state
 plot_embedding(Me, color_by = 'monocle_state')

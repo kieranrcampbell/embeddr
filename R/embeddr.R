@@ -26,25 +26,41 @@
 #' } 
 #' 
 #' @return An n by n adjacency matrix
-weighted_graph <- function(x, kernel=c('nn','dist','heat'), 
+weighted_graph <- function(x, kernel=c('nn','dist','heat'), metric=c('euclidean','correlation'),
                            nn = 20, eps = NULL, t = NULL,
                            symmetrize = c('mean','ceil','floor')) {
   ## sanity checking
   kernel <- match.arg(kernel)
   symmetrize <- match.arg(symmetrize)
+  metric <- match.arg(metric)
   
   ## compute distance matrix
-  dm <- as.matrix(dist(t(x)))
+  dm <- NULL
+  if(metric == 'euclidean') {
+    dm <- as.matrix(dist(t(x)))
+  } else if(metric == 'correlation') {
+    dm <- cor(x)
+  }
   
   W <- NULL
   if(kernel == 'nn' || kernel == 'heat') {
-    W <- apply(dm, 2, function(r) {
-      ind <- order(r)[1:nn]
-      rep_vec <- rep(0, length(r))
-      rep_vec[ind] <- 1
-      names(rep_vec) <- names(r)
-      return( rep_vec )
-    })
+    if(metric == 'euclidean') {
+      W <- apply(dm, 2, function(r) {
+        ind <- order(r)[1:nn]
+        rep_vec <- rep(0, length(r))
+        rep_vec[ind] <- 1
+        names(rep_vec) <- names(r)
+        return( rep_vec )
+      })
+    } else if(metric == 'correlation') {
+      W <- apply(dm, 2, function(r) {
+        ind <- order(r, decreasing = TRUE)[1:nn]
+        rep_vec <- rep(0, length(r))
+        rep_vec[ind] <- 1
+        names(rep_vec) <- names(r)
+        return( rep_vec )
+      })
+    }
     ## symmetrise as A -> B => B -> A
     W <- 0.5 * (W + t(W))
     if(symmetrize == 'ceil') {
@@ -55,6 +71,7 @@ weighted_graph <- function(x, kernel=c('nn','dist','heat'),
   }
   
   if(kernel == 'heat') {
+    if(metric == 'correlation') stop('Heat hernel not supported for correlation metric')
     We <- exp(-dm * dm / t) 
     W <- W * We
   }
@@ -350,14 +367,15 @@ plot_graph <- function(M, W) {
 #' 
 #' @return An object of class VGAM
 fit_pseudotime_model <- function(y, t, min_expr) {
-  b <- ns(t, df=3)
-  fit <- NULL
-  tryCatch({
-    fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
-  }, error = function(e) {
-    fit <- NULL
-  })
-  return( fit )
+  b <- bs(t, df=3)
+#   fit <- NULL
+#   tryCatch({
+#     fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
+#   }, error = function(e) {
+#     fit <- NULL
+#   })
+#   return( fit )
+   lm(y ~ b)
 }
 
 #' Fit the null pseudotime model
@@ -367,7 +385,8 @@ fit_pseudotime_model <- function(y, t, min_expr) {
 #' 
 #'  @return An object of class VGAM 
 fit_null_model <- function(y, min_expr) {
-  suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
+  # suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
+  lm(y ~ 1)
 }
 
 #' Plot the fit in pseudotime
@@ -380,7 +399,7 @@ fit_null_model <- function(y, min_expr) {
 #' 
 #' @return An plot object from \code{ggplot}
 plot_pseudotime_model <- function(model, y, t, min_expr) {
-  df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = min_expr)
+  df <- data.frame(y=y, t=t, p=predict(model), min_expr = min_expr) ## predict(model)[,1]
   
   plt <- ggplot(df)  + geom_line(aes(x=t,y=p, color='Predicted')) +
     theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
@@ -401,7 +420,10 @@ plot_pseudotime_model <- function(model, y, t, min_expr) {
 #' 
 #' @return The p-value
 compare_models <- function(model, null_model) {
-  lrt <- VGAM::lrtest(model, null_model)
-  return( lrt@Body["Pr(>Chisq)"][2, ] )
+  require(lmtest)
+  require(VGAM)
+  lrt <- lmtest::lrtest(model, null_model)
+  return( lrt$"Pr(>Chisq)"[2] ) # lmtest
+  #lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
 }
 

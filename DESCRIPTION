@@ -16,4 +16,5 @@ Imports:
   Matrix,
   gplots,
   reshape2,
-  VGAM
+  VGAM,
+  lmtest
