@@ -95,14 +95,14 @@ plot_in_pseudotime( M1, dd_tmp, genes='Fabp5' )
 It appears cluster 2 corresponds to `BP` cells, while cluster 1 corresponds to `AT1` and cluster 3 corresponds to `AT2` cells. We'd ideally like to have a pseudotemporal ordering ofr cells as they transition from `BP` to `AT1` and a second transitioning from `BP` to `AT2`. Let's start with the first. From visual inspection there also appear to be some outlier cells mis-classified. Let's remove them before continuing also.
 
 ```{r ps-1, cache=TRUE, fig.align='center'}
-M_bp_at1 <- filter(M, cluster %in% 1:2, component_1 > 0.04)
+M_bp_at1 <- filter(M, cluster %in% 1:2, component_1 < -0.045)
 M_bp_at1 <- fit_pseudotime(M_bp_at1)
 plot_embedding(M_bp_at1)
 ```
 
 Now we need to get the gene expression matrix confined to the cells we've identified:
 ```{r remove-zero-var, cache=TRUE}
-bp_at1 <- M$cluster %in% 1:2 & M$component_1 > 0.04
+bp_at1 <- M$cluster %in% 1:2 & M$component_1 < -0.045
 dd_bp_at1 <- data.frame(d_het[, bp_at1])
 plot_in_pseudotime( M_bp_at1, dd_bp_at1, genes='Fabp5' )
 
@@ -159,7 +159,7 @@ Adjust the p-values to find significantly varying ones:
 ```{r sig-vary, cache=TRUE}
 adj_sigs <- p.adjust(sig_tests, method='BH')
 
-alpha <- 0.01
+alpha <- 0.005
 sig_genes <- names(which(adj_sigs < alpha))
 sg <- adj_sigs[adj_sigs < alpha]
 ```
@@ -193,7 +193,7 @@ plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 3])
 Now let's do the same for the transition into AT2:
 
 ```{r ps-2, cache=TRUE, fig.align='center'}
-M_bp_at2 <- filter(M, cluster %in% 2:3, component_1 > 0.04)
+M_bp_at2 <- filter(M, cluster %in% 2:3, component_1 < 0.045)
 M_bp_at2 <- fit_pseudotime(M_bp_at2)
 plot_embedding(M_bp_at2)
 M_bp_at2 <- reverse_pseudotime(M_bp_at2)
@@ -201,7 +201,7 @@ M_bp_at2 <- reverse_pseudotime(M_bp_at2)
 
 Now we need to get the gene expression matrix confined to the cells we've identified:
 ```{r remove-zero-var-2, cache=TRUE}
-bp_at2 <- M$cluster %in% 2:3 & M$component_1 > 0.04
+bp_at2 <- M$cluster %in% 2:3 & M$component_1 < 0.045
 dd_bp_at2 <- data.frame(d_het[, bp_at2])
 plot_in_pseudotime( M_bp_at2, dd_bp_at2, genes='Fabp5' )
 
@@ -223,7 +223,7 @@ qplot(sig_tests) + theme_minimal()
 
 ```{r sig-vary-2, cache=TRUE}
 adj_sigs <- p.adjust(sig_tests, method='BH')
-alpha <- 0.01
+alpha <- 0.005
 sig_genes <- names(which(adj_sigs < alpha))
 sg <- adj_sigs[adj_sigs < alpha]
 
