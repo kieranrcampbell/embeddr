@@ -20,7 +20,8 @@ library(plyr)
 library(dplyr)
 library(ggplot2)
 library(ggthemes)
-load_all('..')
+library(caret)
+load_all('.')
 data(HSMM)
 
 ```
@@ -111,7 +112,7 @@ plot_graph(Me, W)
 We can also cluster the embedding using kmeans and plot:
 ```{r clust_emb, cache=TRUE, fig.align='center', fig.width=6, fig.height=4.5}
 set.seed(123)
-Me <- cluster_embedding(Me, k=3)
+Me <- cluster_embedding(Me, 3)
 plot_embedding(Me)
 M <- Me
 ```
@@ -152,7 +153,7 @@ qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime) 
 
 So there is good correspondence between the `monocle` and `embeddr` pseudotimes, though it appears that the `embeddr` version goes in the wrong direction. Pseudotimes are equivalent up to parity and scaling transformations (which is perhaps more philosophical than it sounds), so we can use the `embeddr::reverse_pseudotime` function to make the pseudotimes 'run' in the same direction:
 
-```{r reverse-pseudotime, fig.align='center', fig.width=4, fig.height=4}
+```{r reverse-pseudotime, fig.align='center', fig.width=4, fig.height=4, cache=TRUE}
 Mp <- reverse_pseudotime(Mp)
 qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(Mp, cell_id)$pseudotime) +
   theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
@@ -179,7 +180,7 @@ which is largely similar to the monocle equivalent.
 
 We can also plot a heatmap of all the genes in pseudotime:
 
-```{r heatmap, fig.align='center', fig.width=8.5,fig.height=6, message=FALSE}
+```{r heatmap, fig.align='center', fig.width=8.5,fig.height=6, message=FALSE, cache=TRUE}
 plot_heatmap(Mp, x)
 ```
 
@@ -256,4 +257,70 @@ ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(cl
   scale_color_fivethirtyeight(name='cluster') + scale_size_continuous(name='log10(count)')
 ```
 
+Subsample to check robustness:
 
+```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8, fig.align='center'}
+ncv <- 8
+inds <- createFolds(1:nrow(Me), ncv)
+
+embeddings <- lapply(1:ncv, function(i) {
+  xep <- xe[,-inds[[i]] ]
+  W_tmp <- weighted_graph(xep, metric='correlation', nn = 6)
+  M_tmp <- laplacian_eigenmap(W_tmp, type='unorm')
+  M_tmp$cluster <- Me$cluster[-inds[[i]] ]
+  M_tmp$fold <- i
+  M_tmp
+  })
+
+df_emb <- do.call('rbind', embeddings)
+plot_embedding(df_emb) + facet_wrap(~ fold)
+```
+
+Try the same with 1/3 of the data:
+```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=3, fig.align='center'}
+ncv <- 3
+
+inds_3 <- createFolds(1:nrow(Me), k=ncv)
+
+embeddings_3 <- lapply(1:ncv, function(i) {
+  xep <- xe[,-inds_3[[i]] ]
+  W_tmp <- weighted_graph(xep, metric='correlation', nn = 6)
+  M_tmp <- laplacian_eigenmap(W_tmp, type='unorm')
+  M_tmp$cluster <- Me$cluster[-inds_3[[i]] ]
+  M_tmp$fold <- i
+  M_tmp
+  })
+
+df_emb3 <- do.call('rbind', embeddings_3)
+plot_embedding(df_emb3) + facet_wrap(~ fold)
+```
+And see that the pseudotime fits are roughly constant:
+
+```{r fit-cv-pst, cache=TRUE, fig.align='center', warning=FALSE, message=FALSE}
+ncv <- 5
+
+folds <- createMultiFolds(1:nrow(Me), k = 8, times = 30)
+all_embeddings <- lapply(folds, function(ind) {
+    xep <- xe[,ind]
+    W_tmp <- weighted_graph(xep, metric='correlation', nn = 6)
+    M_tmp <- laplacian_eigenmap(W_tmp, type='unorm')
+    M_tmp$cluster <- Me$cluster[ind]
+    M_tmp
+  })
+
+#all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
+
+psts <- lapply(all_embeddings, function(M_tmp) {
+  M_tmp <- fit_pseudotime(M_tmp, clusters = c(1,3))
+  M_tmp$pseudotime
+})
+
+ corrs <- sapply(1:length(all_embeddings), function(i) {
+  cells_in_i <- all_embeddings[[i]]$cell_id
+  Mp_i <- filter(Mp, cell_id %in% cells_in_i)
+  abs(cor(psts[[i]], Mp_i$pseudotime))
+})
+qplot(corrs) + theme_minimal() +
+  ggtitle('Correlation between sampled pseudotimes') +
+  xlab('Correlation')
+```
