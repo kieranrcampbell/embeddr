@@ -15,13 +15,15 @@ library(ggplot2)
 library(splines)
 library(VGAM)
 library(corrplot)
-load_all("/net/isi-scratch/kieran/embeddr/embeddr")
+embeddr_path <- '~/oxford/embeddr/embeddr' # "/net/isi-scratch/kieran/embeddr/embeddr"
+load_all(embeddr_path)
 
 set.seed(123)
 ```
 
 ```{r load-data, cache=TRUE}
-d <- fread("/net/isi-scratch/kieran//datasets/lung/data.txt")
+data_path <- '~/oxford/embeddr/data//data.txt' # "/net/isi-scratch/kieran//datasets/lung/data.txt"
+d <- fread(data_path)
 
 ## want to remove bulk samples
 bulk_i <- which(d$putative_cell_type == 'bulk')
@@ -183,10 +185,13 @@ plot(hc)
 
 Finally plot genes going up or down in pseudotime:
 ```{r gene-up, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
-gene_groups <- cutree(hc, 3)
+gene_groups <- cutree(hc, 6)
 plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 1])
 plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 2])
 plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 3])
+plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 4])
+plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 5])
+plot_in_pseudotime(M_bp_at1, t(df_all_genes), sig_genes[gene_groups == 6])
 
 ```
 
