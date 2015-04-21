@@ -15,27 +15,22 @@ library(ggplot2)
 library(splines)
 library(VGAM)
 library(corrplot)
-embeddr_path <- '~/oxford/embeddr/embeddr' # "/net/isi-scratch/kieran/embeddr/embeddr"
+library(scater)
+embeddr_path <-  "/net/isi-scratch/kieran/embeddr/embeddr" # '~/oxford/embeddr/embeddr' #
 load_all(embeddr_path)
 
 set.seed(123)
 ```
 
 ```{r load-data, cache=TRUE}
-data_path <- '~/oxford/embeddr/data//data.txt' # "/net/isi-scratch/kieran//datasets/lung/data.txt"
-d <- fread(data_path)
-
-## want to remove bulk samples
-bulk_i <- which(d$putative_cell_type == 'bulk')
-d <- d[-bulk_i,]
-
-d_numeric <- select(d, -cell_name, -time_point, -sample, -putative_cell_type)
+## load object 'sce' 
+load('data/lung_sce.RData.gz')
 ```
 
 Next we want to fit a noise model to find highly variable genes:
 ```{r noise-model, cache=TRUE, fig.align='center'}
-Lmeans <- colMeans(d_numeric)
-Lvars <- apply(d_numeric, 2, var)
+Lmeans <- rowMeans(exprs(sce))
+Lvars <- apply(exprs(sce), 1, var)
 
 to_use <- Lmeans > 0.5 & Lvars > 0 
 
@@ -54,22 +49,20 @@ ggplot(df_var, aes(x=m, y=CV2, color=is_het)) + geom_point() +
   stat_function(fun=f, color='black') + theme_bw()
 
 het_genes <- names(which(is_het))
-het_indices <- match(het_genes, names(d_numeric))
+het_indices <- match(het_genes, rownames(sce))
 
-
-d_het <- t(d_numeric[,het_indices,with=FALSE])
+sce_var <- sce[het_indices,]
 ```
 
 Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
 
 ```{r le1, cache=TRUE, fig.align='center', message=FALSE, warning=FALSE}
-d_het <- t(d_numeric[,het_indices,with=FALSE])
-W <- weighted_graph(d_het, metric='correlation', nn=10)
-M <- laplacian_eigenmap(W, type='unorm')
+W <- weighted_graph(sce_var, metric='correlation', nn=10)
+M <- laplacian_eigenmap(sce, W, type='unorm')
 
-M$cluster <- d$putative_cell_type
-plot_embedding(M)
-plot_graph(M, W)
+phenoData(sce)$cluster <- pData(sce)$putative_cell_type
+plot_embedding(sce)
+plot_graph(sce, W)
 ```
 
 It is obvious we have two very separate trajectories; let's consider the pseudotemporal ordering of one only:

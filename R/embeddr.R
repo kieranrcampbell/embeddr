@@ -87,12 +87,13 @@ weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
 #' Laplacian eigenmaps
 #'
 #' Construct a laplacian eigenmap embedding
+#' @param sce The SCESet object
 #' @param W Weight matrix
 #' @param type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
 #' @param p Dimension of the embedded space, default is 2
 #'
 #' @return The p-dimensional embedding
-laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
+laplacian_eigenmap <- function(W, sce, type=c('unorm','norm'), p=2) {
   type <- match.arg(type)
   if(nrow(W) != ncol(W)) {
     print('Input weight matrix W must be symmetric')
@@ -121,8 +122,8 @@ laplacian_eigenmap <- function(W, type=c('norm','unorm'), p=2) {
 
   colnames(M) <- paste('component_', 1:p, sep='')
   M <- data.frame(M)
-  M$cell_id <- colnames(W)
-  return( M )
+  pData(sce) <- new('AnnotatedDataFrame', data=cbind(pData(sce), M))
+  return( sce )
 }
 
 #' Plot the degree distribution of the weight matrix
@@ -241,12 +242,25 @@ fit_pseudotime <- function(M, clusters = NULL, ...) {
 #' @param color_by The variable to color the embedding with (defaults to cluster)
 #'
 #' @return A \code{ggplot2} plot
-plot_embedding <- function(M, color_by = 'cluster') {
-  library(ggplot2)
-
-  if('pseudotime' %in% names(M)) M <- arrange(M, pseudotime)
-  if(!('cluster' %in% names(M))) color_by <- 'pseudotime'
-
+plot_embedding <- function(sce, color_by = 'cluster') {
+  M <- select(pData(sce), component_1, component_2)
+  
+  
+#   if('cluster' %in% names(pData(sce))) {
+#     M <- cbind(M, select(pData(sce), cluster))
+#     color_by <- 'pseudotime'
+#   }
+  if(color_by %in% names(pData(sce))) {
+    col <- match(color_by, names(pData(sce)))
+    M <- cbind(M, select(pData(sce), col))
+  }
+  if('pseudotime' %in% names(pData(sce))) {
+    M <- cbind(M, select(pData(sce), pseudotime))
+    M <- arrange(M, pseudotime)
+  }
+  
+  print(color_by)
+  print(names(M))
   plt <- ggplot(data=M) + theme_bw()
   if(color_by %in% names(M)) {
     if(color_by == 'pseudotime') {
@@ -334,9 +348,8 @@ plot_heatmap <- function(M, x, ...) {
             col=redblue(256), trace="none", density.info="none", scale="row", ...)
 }
 
-plot_graph <- function(M, W) {
-  library(plyr)
-  df <- select(M, x = component_1, y = component_2)
+plot_graph <- function(sce, W) {
+  df <- select(pData(sce), x = component_1, y = component_2)
 
   diag(W) <- 0
   locs <- which((1 * lower.tri(W) * W) > 0, arr.ind = TRUE)
