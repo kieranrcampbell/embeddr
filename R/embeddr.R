@@ -9,7 +9,7 @@
 
 #' Construct a weighted graph adjacency matrix
 #'
-#' @param x A k by n matrix for n samples with k features (probably transpose of what you would expect)
+#' @param sce The SCESet object
 #' @param kernel The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
 #' 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
 #' Belkin & Niyogi
@@ -128,7 +128,7 @@ laplacian_eigenmap <- function(W, sce, type=c('unorm','norm'), p=2) {
 
 #' Plot the degree distribution of the weight matrix
 #'
-#' @param W Weight matrix
+#' @param The SCESet object
 #' @param ignore_weights If TRUE weights are discretised to 0 - 1
 #' @return A ggplot histogram of weights
 plot_degree_dist <- function(W, ignore_weights = FALSE) {
@@ -149,14 +149,14 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' Cluster the embedded representation using either kmeans or mixture models
 #' from the mclust package
 #'
-#' @param M The dataframe containing the embedding (in component_1 and component_2)
+#' @param The SCESet object
 #' @param k The number of clusters to find in the data
 #' @param method Either 'kmeans' or 'mm' to use \code{mclust}
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
-cluster_embedding <- function(M, k = NULL, method=c('kmeans','mm')) {
+cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
   library(dplyr)
-  M_xy <- dplyr::select(M, component_1, component_2)
+  M_xy <- dplyr::select(pData(sce), component_1, component_2)
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
@@ -164,9 +164,9 @@ cluster_embedding <- function(M, k = NULL, method=c('kmeans','mm')) {
   } else if(method == 'mm') {
     library(mclust)
     mc <- Mclust(M_xy, G=k)
-    M$cluster <- as.factor(mc$classification)
+    phenoData(sce)$cluster <- as.factor(mc$classification)
   }
-  return( M )
+  return( sce )
 }
 
 fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
@@ -208,7 +208,7 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #'
 #' Fits the pseudotime curve using principal curves from the princurve library
 #'
-#' @param M The dataframe containing the embedding
+#' @param sce The SCESet object
 #' @param clusters The (numeric) clusters to use for the curve fitting. If NULL (default) then
 #' all points are used
 #'
@@ -217,19 +217,16 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' \item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve)}
 #' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
-fit_pseudotime <- function(M, clusters = NULL, ...) {
-  library(dplyr)
-  library(princurve)
-  Mp <- M
-  if(!is.null(clusters)) Mp <- dplyr::filter(M, cluster %in% clusters)
-  pc <- principal.curve(x = as.matrix(dplyr::select(Mp, component_1, component_2)), ...)
+fit_pseudotime <- function(sce, clusters = NULL, ...) {
+  M <- select(pData(sce), component_1, component_2)
+  if(!is.null(clusters)) M <- M[pData(sce)$cluster %in% clusters, ]
+  pc <- principal.curve(x = as.matrix(dplyr::select(M, component_1, component_2)), ...)
   pst <- pc$lambda
   pst <- (pst - min(pst)) / (max(pst) - min(pst))
-  Mp$pseudotime <- pst
-  Mp$trajectory_1 <- pc$s[,1]
-  Mp$trajectory_2 <- pc$s[,2]
-  #Mp <- arrange(Mp, pseudotime)
-  return( Mp )
+  phenoData(sce)$pseudotime <- pst
+  phenoData(sce)$trajectory_1 <- pc$s[,1]
+  phenoData(sce)$trajectory_2 <- pc$s[,2]
+  return( sce )
 }
 
 #' Plot the cells in the embedding
@@ -238,7 +235,7 @@ fit_pseudotime <- function(M, clusters = NULL, ...) {
 #' and plots the resulting embedding. If clusters are assigned it can colour by these, and if a pseudotime
 #' trajectory is assigned it will plot this through the embeddding.
 #'
-#' @param M The dataframe containing the embedding
+#' @param sce The SCESet object
 #' @param color_by The variable to color the embedding with (defaults to cluster)
 #'
 #' @return A \code{ggplot2} plot
@@ -255,12 +252,10 @@ plot_embedding <- function(sce, color_by = 'cluster') {
     M <- cbind(M, select(pData(sce), col))
   }
   if('pseudotime' %in% names(pData(sce))) {
-    M <- cbind(M, select(pData(sce), pseudotime))
+    M <- cbind(M, select(pData(sce), pseudotime, trajectory_1, trajectory_2))
     M <- arrange(M, pseudotime)
   }
   
-  print(color_by)
-  print(names(M))
   plt <- ggplot(data=M) + theme_bw()
   if(color_by %in% names(M)) {
     if(color_by == 'pseudotime') {
@@ -299,18 +294,18 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'  @param ncol Number of columns of plots; passed to \code{facet_wrap}
 #'
 #'  @return A \code{ggplot2} plot
-plot_in_pseudotime <- function(Mp, xp, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
+plot_in_pseudotime <- function(sce, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
   library(reshape2)
   library(dplyr)
-  if(ncol(xp) != nrow(Mp)) stop('xp must be gene-by-cell matrix')
 
-  xp <- data.frame(t(xp))
+  xp <- data.frame(t(exprs(sce))) # now cell-by-gene
   xp <- dplyr::select(xp, one_of(genes))
   if(!is.null(short_names)) names(xp) <- short_names
-  xp$pseudotime <- Mp$pseudotime
+  
+  xp$pseudotime <- pData(sce)$pseudotime
 
-  cn <- 'cluster' %in% names(Mp)
-  if(cn) xp$cluster <- Mp$cluster
+  cn <- 'cluster' %in% names(pData(sce))
+  if(cn) xp$cluster <- pData(sce)$cluster
   id_vars <- 'pseudotime'
   if(cn) id_vars <- c(id_vars, 'cluster')
 
