@@ -1,0 +1,46 @@
+---
+title: "Converting Quake et al to `scater` object"
+author: "Kieran Campbell"
+date: "04/21/2015"
+output: html_document
+---
+
+```{r load-libraries, message=FALSE}
+library(scater)
+library(devtools)
+library(data.table)
+library(dplyr)
+```
+
+Load embeddr (optional):
+```{r load-embeddr}
+embeddr_path <- "/net/isi-scratch/kieran/embeddr/embeddr" #'~/oxford/embeddr/embeddr' # 
+load_all(embeddr_path)
+```
+
+Load the data:
+```{r load-data}
+data_path <-  "/net/isi-scratch/kieran//datasets/lung/data.txt" # '~/oxford/embeddr/data//data.txt' #
+d <- fread(data_path, data.table=FALSE)
+
+## remove bulk samples:
+
+d <- dplyr::filter(d, putative_cell_type != 'bulk')
+```
+
+Basic `scater` object has phenodata (some metadata for each cell) and a gene-by-cell expression matrix:
+
+```{r construct-scater}
+d_numeric <- select(d, -cell_name, -time_point, -sample, -putative_cell_type)
+d_pheno <- select(d, cell_name, time_point, sample, putative_cell_type)
+
+pd <- new('AnnotatedDataFrame', data=d_pheno)
+sce <- newSCESet(cellData = t(d_numeric), phenoData = pd)
+
+print(sce)
+```
+
+Now save to an R object for easy loading:
+```{r save-sce}
+save(sce, file='lung_sce.RData.gz', compress='gzip')
+```
