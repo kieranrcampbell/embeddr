@@ -376,9 +376,15 @@ plot_graph <- function(sce, W) {
 #' This function fits the expression profile of y as a function of
 #' pseudotime using a natural cubic spline of degree three. A tobit model
 #' is used to censor values less than min_expr
+#' 
+#' @param sce An object of type SCESet
+#' @param gene The gene name to fit 
 #'
 #' @return An object of class VGAM
-fit_pseudotime_model <- function(y, t, min_expr) {
+fit_pseudotime_model <- function(sce, gene) {
+  t <- pData(sce)$pseudotime
+  y <- exprs(sce)[gene ,]
+  # min_expr <- 0 # see paper
   b <- bs(t, df=3)
 #   fit <- NULL
 #   tryCatch({
@@ -395,8 +401,12 @@ fit_pseudotime_model <- function(y, t, min_expr) {
 #' This function fits the null expression profile in y (ie y ~ 1). A tobit model is
 #' used to censor values less than min_expr
 #'
-#'  @return An object of class VGAM
-fit_null_model <- function(y, min_expr) {
+#' @param sce The SCESet object
+#' @param gene The gene name to fit
+#' 
+#' @return An object of class VGAM
+fit_null_model <- function(sce, gene) {
+  y <- exprs(sce)[gene,]
   # suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
   lm(y ~ 1)
 }
@@ -410,8 +420,10 @@ fit_null_model <- function(y, min_expr) {
 #' @clusters Any clustering by cell type
 #'
 #' @return An plot object from \code{ggplot}
-plot_pseudotime_model <- function(model, y, t, min_expr) {
-  df <- data.frame(y=y, t=t, p=predict(model), min_expr = min_expr) ## predict(model)[,1]
+plot_pseudotime_model <- function(sce, model, gene) {
+  y <- exprs(sce)[gene,]
+  t <- pData(sce)$pseudotime
+  df <- data.frame(y=y, t=t, p=predict(model), min_expr = sce@lowerDetectionLimit) ## predict(model)[,1]
 
   plt <- ggplot(df)  + geom_line(aes(x=t,y=p, color='Predicted')) +
     theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
