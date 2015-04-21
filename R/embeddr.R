@@ -26,14 +26,16 @@
 #' }
 #'
 #' @return An n by n adjacency matrix
-weighted_graph <- function(x, kernel=c('nn','dist','heat'), metric=c('euclidean','correlation'),
-                           nn = 20, eps = NULL, t = NULL,
+weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
+                           metric=c('correlation', 'euclidean'),
+                           nn = round(log(ncol(sce))), eps = NULL, t = NULL,
                            symmetrize = c('mean','ceil','floor')) {
   ## sanity checking
   kernel <- match.arg(kernel)
   symmetrize <- match.arg(symmetrize)
   metric <- match.arg(metric)
 
+  x <- exprs(sce)
   ## compute distance matrix
   dm <- NULL
   if(metric == 'euclidean') {
