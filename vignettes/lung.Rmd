@@ -24,7 +24,7 @@ set.seed(123)
 
 ```{r load-data, cache=TRUE}
 ## load object 'sce' 
-load('data/lung_sce.RData.gz')
+load('/net/isi-scratch/kieran/embeddr/embeddr/data/lung_sce.RData.gz')
 ```
 
 Next we want to fit a noise model to find highly variable genes:
@@ -58,7 +58,7 @@ Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
 
 ```{r le1, cache=TRUE, fig.align='center', message=FALSE, warning=FALSE}
 W <- weighted_graph(sce_var, metric='correlation', nn=10)
-M <- laplacian_eigenmap(sce, W, type='unorm')
+sce <- laplacian_eigenmap(sce, W, type='unorm')
 
 phenoData(sce)$cluster <- pData(sce)$putative_cell_type
 plot_embedding(sce)
@@ -113,7 +113,7 @@ gene <- 'Fabp5'
 model <- fit_pseudotime_model(sce_bp_at1, gene)
 null_model <- fit_null_model(sce_bp_at1,  gene)
 p_val <- compare_models(model, null_model)
-plot_pseudotime_model(sce, model, gene) + ggtitle('Fabp5 expression in pseudotime')
+plot_pseudotime_model(sce_bp_at1, model, gene) + ggtitle('Fabp5 expression in pseudotime')
 print(p_val)
 ```
 
@@ -180,25 +180,20 @@ plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 6])
 Now let's do the same for the transition into AT2:
 
 ```{r ps-2, cache=TRUE, fig.align='center'}
-M_bp_at2 <- filter(M, cluster %in% 2:3, component_1 < 0.045)
-M_bp_at2 <- fit_pseudotime(M_bp_at2)
-plot_embedding(M_bp_at2)
-M_bp_at2 <- reverse_pseudotime(M_bp_at2)
+sce_bp_at2 <- sce[, pData(sce)$cluster %in% 2:3 & pData(sce)$component_1 < -0.045]
+sce_bp_at2 <- fit_pseudotime(sce_bp_at2)
+plot_embedding(sce_bp_at2)
+sce_bp_at2 <- reverse_pseudotime(sce_bp_at2)
 ```
 
 Now we need to get the gene expression matrix confined to the cells we've identified:
 ```{r remove-zero-var-2, cache=TRUE}
-bp_at2 <- M$cluster %in% 2:3 & M$component_1 < 0.045
-dd_bp_at2 <- data.frame(d_het[, bp_at2])
-plot_in_pseudotime( M_bp_at2, dd_bp_at2, genes='Fabp5' )
+plot_in_pseudotime( sce_bp_at2, genes='Fabp5' )
 
-t <- M_bp_at2$pseudotime
+zerovars <- which(apply(exprs(sce_bp_at2), 1, function(x) var(x) == 0))
+sce_bp_at2 <- sce_bp_at2[-zerovars,]
 
-## Remove zero variance genes
-df_all_genes <- data.frame(d_numeric[bp_at2, ])
-toremove <- which(apply(df_all_genes, 2, function(x) var(x) == 0))
-df_all_genes_nonzero  <- df_all_genes[,-toremove]
-sig_tests <- apply(df_all_genes_nonzero + 1, 2, test_gene, t, min_expr + 1)
+sig_tests <- sapply(featureNames(sce_bp_at2), test_gene, sce_bp_at2)
 ```
 
 And another look at the p-values:
@@ -212,16 +207,14 @@ qplot(sig_tests) + theme_minimal()
 adj_sigs <- p.adjust(sig_tests, method='BH')
 alpha <- 0.005
 sig_genes <- names(which(adj_sigs < alpha))
-sg <- adj_sigs[adj_sigs < alpha]
-
+#sg <- adj_sigs[adj_sigs < alpha]
 ```
 
 Plot correlations of genes across pseudotime:
 ```{r plot-corr-2, fig.align='center', fig.width=9, fig.height=9}
-df_cor <- df_all_genes[,sig_genes]
-gene_cor <- cor(df_cor)
+exprs_cor <- exprs(sce_bp_at2[sig_genes, ])
+gene_cor <- cor(t(exprs_cor))
 corrplot(gene_cor,order='hclust')
-
 ```
 
 Look at directionality of genes by hierarchical clustering:
@@ -234,11 +227,9 @@ plot(hc)
 ```
 
 ```{r gene-pattern-2, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
-gene_groups <- cutree(hc, 3)
-plot_in_pseudotime(M_bp_at2, t(df_all_genes), sig_genes[gene_groups == 1])
-plot_in_pseudotime(M_bp_at2, t(df_all_genes), sig_genes[gene_groups == 2])
-plot_in_pseudotime(M_bp_at2, t(df_all_genes), sig_genes[gene_groups == 3])
-
+gene_groups <- cutree(hc, 2)
+plot_in_pseudotime(sce_bp_at2, sig_genes[gene_groups == 1])
+plot_in_pseudotime(sce_bp_at2, sig_genes[gene_groups == 2])
 ```
 
 So we see there are three main classes of genes: early downregulation, late downregulation and upregulation.

@@ -93,7 +93,7 @@ weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
 #' @param p Dimension of the embedded space, default is 2
 #'
 #' @return The p-dimensional embedding
-laplacian_eigenmap <- function(W, sce, type=c('unorm','norm'), p=2) {
+laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
   type <- match.arg(type)
   if(nrow(W) != ncol(W)) {
     print('Input weight matrix W must be symmetric')
@@ -218,6 +218,7 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
 fit_pseudotime <- function(sce, clusters = NULL, ...) {
+  library(princurve)
   M <- select(pData(sce), component_1, component_2)
   if(!is.null(clusters)) M <- M[pData(sce)$cluster %in% clusters, ]
   pc <- principal.curve(x = as.matrix(dplyr::select(M, component_1, component_2)), ...)
@@ -298,7 +299,7 @@ plot_in_pseudotime <- function(sce, genes, short_names = NULL, nrow = NULL, ncol
   library(reshape2)
   library(dplyr)
 
-  xp <- data.frame(t(exprs(sce))) # now cell-by-gene
+  xp <- data.frame(t(exprs(sce)), check.names = FALSE) # now cell-by-gene
   xp <- dplyr::select(xp, one_of(genes))
   if(!is.null(short_names)) names(xp) <- short_names
   
@@ -329,10 +330,10 @@ plot_in_pseudotime <- function(sce, genes, short_names = NULL, nrow = NULL, ncol
 #'
 #' @param M A dataframe containing a pseudotime variable to be reversed
 #' @return A dataframe with the reversed pseudotime
-reverse_pseudotime <- function(M) {
+reverse_pseudotime <- function(sce) {
   reverse <- function(x) -x + max(x) + min(x)
-  M$pseudotime <- reverse(M$pseudotime)
-  return( M )
+  phenoData(sce)$pseudotime <- reverse(pData(sce)$pseudotime)
+  return( sce )
 }
 
 plot_heatmap <- function(M, x, ...) {
