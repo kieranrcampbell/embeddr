@@ -452,3 +452,40 @@ compare_models <- function(model, null_model) {
   #lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
 }
 
+#' Plot density of cells in pseudotime
+#' 
+#' @param sce An object of class SCESet
+#' @return A `ggplot` object
+plot_pseudotime_density <- function(sce) {
+  t <- pData(sce)$pseudotime
+  ggplot(data.frame(t=t)) + geom_density(aes(x=t), fill='darkred') + theme_bw() + 
+    xlab('Pseudotime') + ylab('Cellular density')
+}
+
+plot_pseudotime_metrics <- function(sce, gene, window_size=NULL) {
+  t <- pData(sce)$pseudotime
+  y <- exprs(sce)[gene,]
+  y <- y[order(t)]
+  t <- sort(t,decreasing = FALSE)
+  
+  if(is.null(window_size)) window_size <- length(y) / 2
+
+  n_points <- length(y) - window_size + 1
+  vt <- sapply(1:n_points, function(i) {
+    interval <- i:(i+window_size - 1)
+    x <- mean(t[interval]) 
+    y_mean <- mean(y[interval])
+    y_var <- var(y[interval])
+    cv <- sqrt(y_var) / y_mean
+    snr <- y_mean / sqrt(y_var)
+    return(c(x,y_mean,y_var, cv, snr))
+  })  
+  df_window <- data.frame(t(vt))
+  names(df_window) <- c('t','Mean','Variance','CV','Signal-to-noise ratio')
+  df_window <- melt(df_window, id='t')
+  ggplot(df_window, aes(x=t,y=value,color=variable)) + geom_line() + 
+    theme_bw() + xlab('Pseudotime')
+}
+
+
+
