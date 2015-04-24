@@ -120,9 +120,13 @@ laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
 
   if(sum(eig$values == 0) > 1) warning(paste('More than one non-zero eigenvalue - disjoint clusters. Multiplicity: ', sum(eig$values == 0)))
 
-  colnames(M) <- paste('component_', 1:p, sep='')
+  colnames(M) <- paste0('component_', 1:p)
   M <- data.frame(M)
-  pData(sce) <- new('AnnotatedDataFrame', data=cbind(pData(sce), M))
+  
+  components_existing <- grep('component', names(pData(sce)))
+  pd <- pData(sce)
+  if(length(components_existing > 0)) pd <- pd[,-components_existing]
+  phenoData(sce) <- new('AnnotatedDataFrame', data=cbind(pd, M))
   return( sce )
 }
 
@@ -160,7 +164,7 @@ cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
-    M$cluster <- km$cluster
+    phenoData(sce)$cluster <- km$cluster
   } else if(method == 'mm') {
     library(mclust)
     mc <- Mclust(M_xy, G=k)
@@ -219,7 +223,8 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
 fit_pseudotime <- function(sce, clusters = NULL, ...) {
   library(princurve)
-  M <- select(pData(sce), component_1, component_2)
+  library(dplyr)
+  M <- dplyr::select(pData(sce), component_1, component_2)
   if(!is.null(clusters)) M <- M[pData(sce)$cluster %in% clusters, ]
   pc <- principal.curve(x = as.matrix(dplyr::select(M, component_1, component_2)), ...)
   pst <- pc$lambda
@@ -241,7 +246,7 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #'
 #' @return A \code{ggplot2} plot
 plot_embedding <- function(sce, color_by = 'cluster') {
-  M <- select(pData(sce), component_1, component_2)
+  M <- dplyr::select(pData(sce), component_1, component_2)
   
   
 #   if('cluster' %in% names(pData(sce))) {
@@ -250,10 +255,10 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #   }
   if(color_by %in% names(pData(sce))) {
     col <- match(color_by, names(pData(sce)))
-    M <- cbind(M, select(pData(sce), col))
+    M <- cbind(M, dplyr::select(pData(sce), col))
   }
   if('pseudotime' %in% names(pData(sce))) {
-    M <- cbind(M, select(pData(sce), pseudotime, trajectory_1, trajectory_2))
+    M <- cbind(M, dplyr::select(pData(sce), pseudotime, trajectory_1, trajectory_2))
     M <- arrange(M, pseudotime)
   }
   
@@ -306,7 +311,7 @@ plot_in_pseudotime <- function(sce, genes, short_names = NULL, nrow = NULL, ncol
   xp$pseudotime <- pData(sce)$pseudotime
 
   cn <- 'cluster' %in% names(pData(sce))
-  if(cn) xp$cluster <- pData(sce)$cluster
+  if(cn) xp$cluster <- as.factor(pData(sce)$cluster)
   id_vars <- 'pseudotime'
   if(cn) id_vars <- c(id_vars, 'cluster')
 
@@ -336,16 +341,16 @@ reverse_pseudotime <- function(sce) {
   return( sce )
 }
 
-plot_heatmap <- function(M, x, ...) {
+plot_heatmap <- function(sce, ...) {
   library(gplots)
-  xp <- x[,order(M$pseudotime)]
+  xp <- exprs(sce)[,order(pData(sce)$pseudotime)]
 
   heatmap.2(xp, dendrogram="none", Colv=FALSE,
             col=redblue(256), trace="none", density.info="none", scale="row", ...)
 }
 
 plot_graph <- function(sce, W) {
-  df <- select(pData(sce), x = component_1, y = component_2)
+  df <- dplyr::select(pData(sce), x = component_1, y = component_2)
 
   diag(W) <- 0
   locs <- which((1 * lower.tri(W) * W) > 0, arr.ind = TRUE)
@@ -385,15 +390,15 @@ plot_graph <- function(sce, W) {
 fit_pseudotime_model <- function(sce, gene) {
   t <- pData(sce)$pseudotime
   y <- exprs(sce)[gene ,]
-  # min_expr <- 0 # see paper
+  min_expr <- sce@lowerDetectionLimit # see paper
   b <- bs(t, df=3)
-#   fit <- NULL
-#   tryCatch({
-#     fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
-#   }, error = function(e) {
-#     fit <- NULL
-#   })
-#   return( fit )
+  fit <- NULL
+  tryCatch({
+    fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
+  }, error = function(e) {
+    fit <- NULL
+  })
+  return( fit )
    lm(y ~ b)
 }
 
@@ -408,8 +413,9 @@ fit_pseudotime_model <- function(sce, gene) {
 #' @return An object of class VGAM
 fit_null_model <- function(sce, gene) {
   y <- exprs(sce)[gene,]
-  # suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
-  lm(y ~ 1)
+  min_expr <- sce@lowerDetectionLimit
+  suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
+  #lm(y ~ 1)
 }
 
 #' Plot the fit in pseudotime
@@ -418,13 +424,13 @@ fit_null_model <- function(sce, gene) {
 #' @param y A vector gene expression of length number of cells
 #' @param t The assigned pseudotime
 #' @param min_expr The minimum expression detection threshold
-#' @clusters Any clustering by cell type
+#' @param clusters Any clustering by cell type
 #'
 #' @return An plot object from \code{ggplot}
 plot_pseudotime_model <- function(sce, model, gene) {
   y <- exprs(sce)[gene,]
   t <- pData(sce)$pseudotime
-  df <- data.frame(y=y, t=t, p=predict(model), min_expr = sce@lowerDetectionLimit) ## predict(model)[,1]
+  df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = sce@lowerDetectionLimit) ## predict(model)[,1]
 
   plt <- ggplot(df)  + geom_line(aes(x=t,y=p, color='Predicted')) +
     theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
@@ -447,9 +453,9 @@ plot_pseudotime_model <- function(sce, model, gene) {
 compare_models <- function(model, null_model) {
   require(lmtest)
   require(VGAM)
-  lrt <- lmtest::lrtest(model, null_model)
-  return( lrt$"Pr(>Chisq)"[2] ) # lmtest
-  #lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
+  lrt <- VGAM::lrtest(model, null_model) # VGAM <-> lmtest
+  #return( lrt$"Pr(>Chisq)"[2] ) # lmtest
+  lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
 }
 
 #' Plot density of cells in pseudotime
@@ -463,13 +469,20 @@ plot_pseudotime_density <- function(sce) {
 }
 
 plot_pseudotime_metrics <- function(sce, gene, window_size=NULL) {
+  df_window <- calculate_metrics(sce, gene, window_size)
+  df_window <- melt(df_window, id='t')
+  ggplot(df_window, aes(x=t,y=value,color=variable)) + geom_line() + 
+    theme_bw() + xlab('Pseudotime')
+}
+
+calculate_metrics <- function(sce, gene, window_size=NULL) {
   t <- pData(sce)$pseudotime
   y <- exprs(sce)[gene,]
   y <- y[order(t)]
   t <- sort(t,decreasing = FALSE)
   
   if(is.null(window_size)) window_size <- length(y) / 2
-
+  
   n_points <- length(y) - window_size + 1
   vt <- sapply(1:n_points, function(i) {
     interval <- i:(i+window_size - 1)
@@ -482,9 +495,7 @@ plot_pseudotime_metrics <- function(sce, gene, window_size=NULL) {
   })  
   df_window <- data.frame(t(vt))
   names(df_window) <- c('t','Mean','Variance','CV','Signal-to-noise ratio')
-  df_window <- melt(df_window, id='t')
-  ggplot(df_window, aes(x=t,y=value,color=variable)) + geom_line() + 
-    theme_bw() + xlab('Pseudotime')
+  return(df_window)
 }
 
 

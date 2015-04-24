@@ -58,7 +58,7 @@ Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
 
 ```{r le1, cache=TRUE, fig.align='center', message=FALSE, warning=FALSE}
 W <- weighted_graph(sce_var, metric='correlation', nn=10)
-sce <- laplacian_eigenmap(sce, W, type='unorm')
+sce <- laplacian_eigenmap(sce, W, type='unorm', p = 3)
 
 phenoData(sce)$cluster <- pData(sce)$putative_cell_type
 plot_embedding(sce)
@@ -68,7 +68,7 @@ plot_graph(sce, W)
 It is obvious we have two very separate trajectories; let's consider the pseudotemporal ordering of one only:
 
 ```{r cluster-plot, cache=TRUE, fig.align='center', message=FALSE}
-sce <- cluster_embedding(sce, method='mm')
+sce <- cluster_embedding(sce, method='kmeans',k = 4)
 plot_embedding(sce)
 
 cl1 <- pData(sce)$cluster %in% 1:3
@@ -88,19 +88,29 @@ plot_in_pseudotime( sce_13 , genes='Fabp5' )
 It appears cluster 2 corresponds to `BP` cells, while cluster 1 corresponds to `AT1` and cluster 3 corresponds to `AT2` cells. We'd ideally like to have a pseudotemporal ordering ofr cells as they transition from `BP` to `AT1` and a second transitioning from `BP` to `AT2`. Let's start with the first. From visual inspection there also appear to be some outlier cells mis-classified. Let's remove them before continuing also.
 
 ```{r ps-1, cache=TRUE, fig.align='center'}
-sce_bp_at1 <- sce[, pData(sce)$cluster %in% 1:2 & pData(sce)$component_1 < -0.045]
+sce_bp_at1 <- sce[, pData(sce)$cluster %in% c(1,3) & pData(sce)$component_1 < -0.045]
 sce_bp_at1 <- fit_pseudotime(sce_bp_at1)
 plot_embedding(sce_bp_at1)
 ```
+
+## Finding genes differentially expressed across pseudotime
+
+### BP to AT1 transition
 
 Now we can plot genes just for this in pseudotime:
 ```{r remove-zero-var, cache=TRUE}
 plot_in_pseudotime( sce_bp_at1, genes='Fabp5' )
 
-## Remove zero variance genes
+## Remove genes expressed in less than 20% of cells
+removeGenes <- function(sce, p=0.2) {
+  isExprs(sce) <- calcIsExprs(sce, expr_data='exprs')
+  ncells_exprs <- rowSums(isExprs(sce))
+  cells_to_keep <- ncells_exprs > p * dim(sce)[2]
+  return( sce[cells_to_keep, ])
+}
 
-zerovars <- which(apply(exprs(sce_bp_at1), 1, function(x) var(x) == 0))
-sce_bp_at1 <- sce_bp_at1[-zerovars,]
+sce_bp_at1 <- removeGenes(sce_bp_at1)
+print(sce_bp_at1)
 ```
 
 We can also fit a pseudotime cubic smoothing spline regression to `Fabp5`:
@@ -144,7 +154,7 @@ Adjust the p-values to find significantly varying ones:
 ```{r sig-vary, cache=TRUE}
 adj_sigs <- p.adjust(sig_tests, method='BH')
 
-alpha <- 0.005
+alpha <- 0.05
 sig_genes <- names(which(adj_sigs < alpha))
 ## sg <- adj_sigs[adj_sigs < alpha]
 ```
@@ -152,8 +162,8 @@ sig_genes <- names(which(adj_sigs < alpha))
 Plot correlations of genes across pseudotime:
 ```{r plot-corr, fig.align='center', fig.width=9, fig.height=9}
 exprs_cor <- exprs(sce_bp_at1[sig_genes, ])
-gene_cor <- cor(t(exprs_cor))
-corrplot(gene_cor,order='hclust')
+gene_cor <- cor(t(exprs_cor), method = 'spearman')
+corrplot(gene_cor, method='square', order='hclust') 
 ```
 
 Look at directionality of genes by hierarchical clustering:
@@ -167,31 +177,59 @@ plot(hc)
 
 Finally plot genes going up or down in pseudotime:
 ```{r gene-up, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
-gene_groups <- cutree(hc, 6)
+gene_groups <- cutree(hc, 3)
 plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 1])
 plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 2])
 plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 3])
-plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 4])
-plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 5])
-plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 6])
+# plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 4])
+# plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 5])
+# plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 6])
 
 ```
+
+Let's see if we can cluster genes based on signal-to-noise ratio:
+```{r cluster-snr-bp-at1, cache=TRUE, warning=FALSE, fig.align='center'}
+snrs <- sapply(sig_genes,function(g) {
+  calculate_metrics(sce_bp_at1, g)$`Signal-to-noise ratio`
+})
+print(dim(snrs))
+cors <- cor(snrs, use='pairwise.complete.obs')
+cors[is.na(cors)] <- 0
+corrplot(cors, method='square', order='hclust')
+print(dim(cors))
+dis <- 1 - cors / 2
+ddis <- as.dist(dis)
+hc <- hclust(ddis)
+plot(hc)
+
+gene_groups_snr <- cutree(hc, 3)
+print(table(gene_groups, gene_groups_snr))
+
+vars <- sapply(sig_genes,function(g) {
+  calculate_metrics(sce_bp_at1, g)$Variance
+})
+varcors <- cor(vars, use='pairwise.complete.obs')
+varcors[is.na(varcors)] <- 0
+corrplot(varcors, method='square', order='hclust')
+```
+
+### BP to AT2 transition
 
 Now let's do the same for the transition into AT2:
 
 ```{r ps-2, cache=TRUE, fig.align='center'}
-sce_bp_at2 <- sce[, pData(sce)$cluster %in% 2:3 & pData(sce)$component_1 < -0.045]
+sce_bp_at2 <- sce[, pData(sce)$cluster %in% c(1,2) & pData(sce)$component_1 < -0.045]
 sce_bp_at2 <- fit_pseudotime(sce_bp_at2)
 plot_embedding(sce_bp_at2)
-sce_bp_at2 <- reverse_pseudotime(sce_bp_at2)
+## sce_bp_at2 <- reverse_pseudotime(sce_bp_at2)
 ```
 
 Now we need to get the gene expression matrix confined to the cells we've identified:
 ```{r remove-zero-var-2, cache=TRUE}
 plot_in_pseudotime( sce_bp_at2, genes='Fabp5' )
 
-zerovars <- which(apply(exprs(sce_bp_at2), 1, function(x) var(x) == 0))
-sce_bp_at2 <- sce_bp_at2[-zerovars,]
+sce_bp_at2 <- removeGenes(sce_bp_at2)
+print(sce_bp_at2)
 
 sig_tests <- sapply(featureNames(sce_bp_at2), test_gene, sce_bp_at2)
 ```
@@ -205,16 +243,16 @@ qplot(sig_tests) + theme_minimal()
 
 ```{r sig-vary-2, cache=TRUE}
 adj_sigs <- p.adjust(sig_tests, method='BH')
-alpha <- 0.005
+alpha <- 0.01
 sig_genes <- names(which(adj_sigs < alpha))
 #sg <- adj_sigs[adj_sigs < alpha]
 ```
 
 Plot correlations of genes across pseudotime:
-```{r plot-corr-2, fig.align='center', fig.width=9, fig.height=9}
+```{r plot-corr-2, fig.align='center', fig.width=9, fig.height=9, cache=TRUE}
 exprs_cor <- exprs(sce_bp_at2[sig_genes, ])
 gene_cor <- cor(t(exprs_cor))
-corrplot(gene_cor,order='hclust')
+corrplot(gene_cor, method='square', order='hclust')
 ```
 
 Look at directionality of genes by hierarchical clustering:
@@ -232,5 +270,62 @@ plot_in_pseudotime(sce_bp_at2, sig_genes[gene_groups == 1])
 plot_in_pseudotime(sce_bp_at2, sig_genes[gene_groups == 2])
 ```
 
-So we see there are three main classes of genes: early downregulation, late downregulation and upregulation.
+## Variables in pseudotime
+We can look at various metrics as a function of pseudotime using a sliding window approach. For example, we can simple look at the density of cells as a function of pseudotime:
 
+```{r cell-density, cache=TRUE, fig.align='center',fig.width=7, fig.height=3.5}
+plot_pseudotime_density(sce_bp_at1)
+plot_pseudotime_density(sce_bp_at2)
+```
+
+We can also look at other metrics like mean, variance, signal-to-noise ratio and CV. For some genes their 'signal' becomes consolidated as differentiation progresses:
+
+```{r snr-up, cache=TRUE, fig.align='center', fig.width=7, fig.height=3.5}
+plot_pseudotime_metrics(sce_bp_at2, gene='Tspan8')
+```
+
+while for others this degrades:
+```{r snr-down, cache=TRUE, fig.align='center', fig.width=7, fig.height=3.5}
+plot_pseudotime_metrics(sce_bp_at2, gene='Sftpc')
+```
+
+
+Let's see if we can cluster genes based on signal-to-noise ratio:
+```{r cluster-snr, cache=TRUE, warning=FALSE, fig.align='center'}
+snrs <- sapply(sig_genes,function(g) {
+  calculate_metrics(sce_bp_at2, g)$`Signal-to-noise ratio`
+})
+print(dim(snrs))
+cors <- cor(snrs, use='pairwise.complete.obs')
+cors[is.na(cors)] <- 0
+corrplot(cors, method='square', order='hclust')
+print(dim(cors))
+dis <- 1 - cors / 2
+ddis <- as.dist(dis)
+hc <- hclust(ddis)
+plot(hc)
+
+gene_groups_snr <- cutree(hc, 2)
+print(table(gene_groups, gene_groups_snr))
+```
+
+
+```{r}
+all_genes <- featureNames(sce_bp_at2)
+
+## convert to ensembl IDs
+# library(biomaRt)
+# library(org.Mm.eg.db)
+# ensembl_mouse <- useMart("ensembl",dataset="mmusculus_gene_ensembl")
+# ensembl_ids <- getBM(attributes=c('mgi_symbol','ensembl_gene_id'), 
+#                      filters='mgi_symbol',values=all_genes, mart=ensembl_mouse)
+# 
+# is_de <- as.numeric(ensembl_ids$mgi_symbol %in% sig_genes[gene_groups == 2])
+# names(is_de) <- ensembl_ids$ensembl_gene_id
+# is_de <- is_de[unique(names(is_de))]
+# table(is_de)
+# 
+# pwf <- nullp(is_de, 'mm10', 'ensGene')
+# GO <- goseq(pwf, 'mm10','ensGene', method='Hypergeometric', test.cats='GO:BP')
+
+```
