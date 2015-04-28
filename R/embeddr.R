@@ -345,7 +345,7 @@ plot_heatmap <- function(sce, ...) {
   library(gplots)
   xp <- exprs(sce)[,order(pData(sce)$pseudotime)]
 
-  heatmap.2(xp, dendrogram="none", Colv=FALSE,
+  heatmap.2(xp, dendrogram="none", Colv=FALSE, Rowv = TRUE,
             col=redblue(256), trace="none", density.info="none", scale="row", ...)
 }
 
@@ -399,7 +399,7 @@ fit_pseudotime_model <- function(sce, gene) {
     fit <- NULL
   })
   return( fit )
-   lm(y ~ b)
+#   lm(y ~ b)
 }
 
 #' Fit the null pseudotime model
@@ -415,7 +415,7 @@ fit_null_model <- function(sce, gene) {
   y <- exprs(sce)[gene,]
   min_expr <- sce@lowerDetectionLimit
   suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
-  #lm(y ~ 1)
+#  lm(y ~ 1)
 }
 
 #' Plot the fit in pseudotime
@@ -430,7 +430,8 @@ fit_null_model <- function(sce, gene) {
 plot_pseudotime_model <- function(sce, model, gene) {
   y <- exprs(sce)[gene,]
   t <- pData(sce)$pseudotime
-  df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = sce@lowerDetectionLimit) ## predict(model)[,1]
+  df <- data.frame(y=y, t=t, p=predict(model, type='response')[,1], min_expr = sce@lowerDetectionLimit) ## predict(model)[,1]
+  df$p[df$p < sce@lowerDetectionLimit] <- sce@lowerDetectionLimit
 
   plt <- ggplot(df)  + geom_line(aes(x=t,y=p, color='Predicted')) +
     theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +

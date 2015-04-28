@@ -22,6 +22,7 @@ library(ggplot2)
 library(ggthemes)
 library(caret)
 library(scater)
+library(corrplot)
 load_all('.')
 data(HSMM)
 
@@ -106,7 +107,7 @@ exprs(sce) <- log10(exprs(sce) + 1)
 
 gene_indices <- match(names(which(genes_for_embedding)), featureNames(sce))
 sce_embedding <- sce[gene_indices,]
-W <- weighted_graph(sce_embedding, nn = 6, metric='correlation')
+W <- weighted_graph(sce_embedding, nn = 4, metric='correlation')
 sce <- laplacian_eigenmap(sce, W)
 
 plot_embedding(sce, color_by = 'State')
@@ -120,7 +121,7 @@ plot_graph(sce, W)
 
 We can also cluster the embedding using kmeans and plot:
 ```{r clust_emb, cache=TRUE, fig.align='center', fig.width=6, fig.height=4.5}
-sce <- cluster_embedding(sce, 3)
+sce <- cluster_embedding(sce, method='mm', k=3)
 plot_embedding(sce)
 ```
 
@@ -137,7 +138,7 @@ ggplot(df_pca, aes(x=x2, y=x1, color=monocle_state)) + geom_point() +
 In the `monocle` paper they show that groups 1 & 3 correspond to differentiating cells while group 2 is contamination. We can separate off groups 1 & 3, fit the pseudotime trajectories and plot:
 
 ```{r fit-pseudotime, fig.align='center', cache=TRUE}
-sce_23 <- sce[, pData(sce)$cluster %in% c(1,3)]
+sce_23 <- sce[, pData(sce)$cluster %in% c(1,2)]
 sce_23 <- fit_pseudotime(sce_23)
 plot_embedding(sce_23)
 ```
@@ -210,7 +211,7 @@ In the original monocle dataset, only a small number of cells were assigned to g
 
 ```{r cont1, fig.align='center', cache=TRUE}
 phenoData(sce)$monocle_classification <- mapvalues(pData(sce)$State, from=1:3, c('non-cont','non-cont','cont'))
-phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','cont','non-cont'))
+phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','non-cont','cont'))
 
 print(table(dplyr::select(pData(sce), monocle_classification, embeddr_classification)))
 ```
@@ -244,6 +245,7 @@ ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), 
   facet_wrap(~gene) + 
   geom_boxplot() + theme_bw() + xlab('') +
   theme(axis.text.x = element_text(angle = -90, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE)
+
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
@@ -317,7 +319,7 @@ all_embeddings <- lapply(folds, function(ind) {
 #all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
 
 psts <- lapply(all_embeddings, function(sce_tmp) {
-  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,3)]
+  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,2)]
   sce_tmp_13 <- fit_pseudotime(sce_tmp_13)
   sce_tmp_13$pseudotime
 })
@@ -331,4 +333,80 @@ psts <- lapply(all_embeddings, function(sce_tmp) {
 qplot(corrs) + theme_minimal() +
   ggtitle('Correlation between sampled pseudotimes') +
   xlab('Correlation')
+```
+
+## Modelling genes in pseudotime
+
+Model a signle gene in pseudotime:
+
+```{r model_pseudotime, cache=TRUE, fig.align='center'}
+cdk1 <- row.names(subset(fData(HSMM),  gene_short_name == 'CDK1'))
+sce_23@lowerDetectionLimit <- log10(1 + 0.1)
+model <- fit_pseudotime_model(sce_23, cdk1)
+null_model <- fit_null_model(sce_23, cdk1)
+p_val <- compare_models(model, null_model)
+plot_pseudotime_model(sce_23, model, cdk1)
+
+```
+
+Now try all of them:
+
+```{r all-genes, cache=TRUE}
+n_cells_expressed <- rowSums(isExprs(sce_23))
+keep_gene <- n_cells_expressed > 0.2 * dim(sce_23)[2]
+
+sce_23_kept <- sce_23[keep_gene,]
+
+test_gene <- function(gene, sce) {
+  tryCatch({
+  model <- embeddr::fit_pseudotime_model(sce, gene)
+  null_model <- embeddr::fit_null_model(sce, gene)
+  return( embeddr::compare_models(model, null_model) )
+  }, error = function(e) {
+    return( 1 ) # if there's an error, just return 1
+  })
+}
+
+sig_tests <- sapply(featureNames(sce_23_kept), test_gene, sce_23_kept)
+
+```
+
+And plot p-vals:
+
+```{r plot-p, cache=TRUE, fig.align='center'}
+save(sig_tests, file='/net/isi-scratch/kieran//embeddr/embeddr/data/sig_tests.Rdata')
+qplot(sig_tests, binwidth=0.01) + theme_bw() + xlab('p-value') 
+```
+
+correct p-values and replot:
+
+```{r correct-p, cache=TRUE, fig.align='center'}
+adj_sigs <- p.adjust(sig_tests, method='BH')
+qplot(adj_sigs, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
+alpha <- 0.01
+sig_inds <- adj_sigs < alpha
+sig_genes <- names(which(sig_inds))
+print(length(sig_genes))
+
+```
+
+```{r correlate-genes, fig.width=9, fig.height=5, fig.align='center', cache=TRUE}
+exprs_cor <- exprs(sce_23[sig_genes, ])
+gene_cor <- cor(t(exprs_cor))
+d <- 1 - gene_cor / 2
+
+hc <- hclust(as.dist(d))
+co <- order.optimal(as.dist(d), hc$merge)$order
+po <- order(pData(sce_23)$pseudotime)
+exprs_ordered <- exprs_cor[co, po] 
+
+#image(exprs_ordered, col=colorRamps::blue2red(2))
+
+exprs_ordered <- t(scale(t(exprs_ordered)))
+rownames(exprs_ordered) <- NULL
+heatmap.2(exprs_ordered, Rowv=TRUE, Colv=NULL, dendrogram='row', density.info='none', keysize=1,
+          trace='none', sepwidth=c(0,0), breaks=seq(from=-1, to=1, by=0.1), 
+          col=colorRampPalette(c('dodgerblue3','white','brown3'))(20)) #matlab.like(20))
+
+
 ```
