@@ -399,7 +399,7 @@ fit_pseudotime_model <- function(sce, gene) {
     fit <- NULL
   })
   return( fit )
-   lm(y ~ b)
+  ## lm(y ~ b)
 }
 
 #' Fit the null pseudotime model
@@ -482,8 +482,26 @@ pseudotime_test <- function(sce, n_cores = 2) {
   return( data.frame(gene=featureNames(sce), p_val = p_vals, q_val = q_vals))
 }
 
+#' return a list of pseudotime models in sce
+fit_pseudotime_models <- function(sce, n_cores = 2) {
+  models <- NULL
+  fpm_wrapper <- function(gene, sce) fit_pseudotime_model(sce, gene)
+  if(n_cores == 1) {
+    models <- lapply(featureNames(sce), fpm_wrapper, sce)
+  } else {
+    models <- mclapply(featureNames(sce), fpm_wrapper, sce, mc.cores = n_cores)
+  }
+  names(models) <- featureNames(sce)
+  return( models )
+}
 
-
+#' Create a predicted expression matrix
+predicted_expression <- function(sce, models = NULL, n_cores = 2) {
+  if(is.null(models))  models <- fit_pseudotime_models(sce, n_cores)
+  predict_list <- lapply(models, function(x) predict(x)[,1])
+  return( do.call('cbind', predict_list) )
+}
+  
 #' Plot density of cells in pseudotime
 #' 
 #' @param sce An object of class SCESet
