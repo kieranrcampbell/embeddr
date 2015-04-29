@@ -459,25 +459,27 @@ compare_models <- function(model, null_model) {
 }
 
 #' Test a single gene as a function of pseudotime
-gene_pseudotime_test <- function(sce, gene_name) {
+gene_pseudotime_test <- function(gene_name, sce) {
   tryCatch({
     model <- embeddr::fit_pseudotime_model(sce, gene_name)
     null_model <- embeddr::fit_null_model(sce, gene_name)
     return( embeddr::compare_models(model, null_model) )
   }, error = function(e) {
+    print('fml')
     return( 1 ) # if there's an error, just return 1
   })
 }
 
 #' pseudotime gene testing
 pseudotime_test <- function(sce, n_cores = 2) {
+  p_vals <- NULL
   if(n_cores == 1) {
     p_vals <- sapply(featureNames(sce), gene_pseudotime_test, sce)
   } else {
     p_vals <- unlist(mclapply(featureNames(sce), gene_pseudotime_test, sce, mc.cores = n_cores))
   }
   q_vals <- p.adjust(p_vals, method='BH')
-  return( data.frame(gene=featureNames(sce)), p_val = p_vals, q_val = q_vals)
+  return( data.frame(gene=featureNames(sce), p_val = p_vals, q_val = q_vals))
 }
 
 
