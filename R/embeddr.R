@@ -300,13 +300,13 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'  @param ncol Number of columns of plots; passed to \code{facet_wrap}
 #'
 #'  @return A \code{ggplot2} plot
-plot_in_pseudotime <- function(sce, genes, short_names = NULL, nrow = NULL, ncol = NULL) {
+plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE) {
   library(reshape2)
   library(dplyr)
 
   xp <- data.frame(t(exprs(sce)), check.names = FALSE) # now cell-by-gene
-  xp <- dplyr::select(xp, one_of(genes))
-  if(!is.null(short_names)) names(xp) <- short_names
+  ## xp <- dplyr::select(xp, one_of(genes))
+  if(use_short_names) names(xp) <- fData(sce)$gene_short_name
   
   xp$pseudotime <- pData(sce)$pseudotime
 
@@ -420,22 +420,43 @@ fit_null_model <- function(sce, gene) {
 
 #' Plot the fit in pseudotime
 #'
-#' @param model Model returned by \code{fit_pseudotime_model} or \code{fit_null_model}
-#' @param y A vector gene expression of length number of cells
-#' @param t The assigned pseudotime
-#' @param min_expr The minimum expression detection threshold
-#' @param clusters Any clustering by cell type
-#'
+#' @param sce An object of class SCE set 
+#' @param model A list of models returned by fit_pseudotime_models. If NULL (default), these will be
+#' re-calculated
+#' @param n_cores Number of cores to use when calculating the pseudotime models if `model` is NULL
+#' 
 #' @return An plot object from \code{ggplot}
-plot_pseudotime_model <- function(sce, model, gene) {
-  y <- exprs(sce)[gene,]
-  t <- pData(sce)$pseudotime
-  df <- data.frame(y=y, t=t, p=predict(model)[,1], min_expr = sce@lowerDetectionLimit) ## predict(model)[,1]
-
-  plt <- ggplot(df)  + geom_line(aes(x=t,y=p, color='Predicted')) +
-    theme_minimal() + geom_line(aes(x=t, y=min_expr, color='Min expr'), linetype=2) +
-    scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red'))
-  plt <- plt + geom_point(aes(x=t, y=y))
+plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
+  if(is.null(models)) models <- fit_pseudotime_models(sce, n_cores)
+  if(dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene in sce')
+  
+  gene_names <- NULL
+  if('gene_short_name' %in% names(fData(sce))) {
+    gene_names <- fData(sce)$gene_short_name
+  } else {
+    gene_names <- featureNames(sce)
+  }
+  
+  min_expr <- sce@lowerDetectionLimit
+  y <- data.frame(t(exprs(sce)))
+  names(y) <- gene_names
+  
+  y$pseudotime <- pData(sce)$pseudotime
+  y_melted <- melt(y, id.vars='pseudotime', value.name='exprs', variable.name='gene')
+  pe <- data.frame(predicted_expression(sce, models))
+  names(pe) <- gene_names
+  pe$pseudotime <- pData(sce)$pseudotime
+  pe_melted <- melt(pe, id.vars='pseudotime', value.name='predicted', variable.name='gene')
+  
+  df <- dplyr::full_join(y_melted, pe_melted, by=c('pseudotime','gene'))
+  df$predicted[df$predicted < min_expr] <- min_expr
+  df$min_expr <- min_expr
+  
+  plt <- ggplot(df)  + geom_line(aes(x=pseudotime,y=predicted, color='Predicted')) +
+    theme_minimal() + geom_line(aes(x=pseudotime, y=min_expr, color='Min expr'), linetype=2) +
+    scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red')) +
+    geom_point(aes(x=pseudotime, y=exprs)) + facet_wrap(~ gene) +
+    ylab('expression')
   return( plt )
 }
 
@@ -459,24 +480,32 @@ compare_models <- function(model, null_model) {
 }
 
 #' Test a single gene as a function of pseudotime
-gene_pseudotime_test <- function(gene_name, sce) {
+gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
+  #print(gene_name)
   tryCatch({
-    model <- embeddr::fit_pseudotime_model(sce, gene_name)
+    if(is.null(full_model)) {
+      model <- embeddr::fit_pseudotime_model(sce, gene_name)
+    } else {
+      model <- full_model
+    }
     null_model <- embeddr::fit_null_model(sce, gene_name)
     return( embeddr::compare_models(model, null_model) )
   }, error = function(e) {
-    print('fml')
     return( 1 ) # if there's an error, just return 1
   })
 }
 
 #' pseudotime gene testing
-pseudotime_test <- function(sce, n_cores = 2) {
+pseudotime_test <- function(sce, models = NULL, n_cores = 2) {
   p_vals <- NULL
+  if(is.null(models)) models <- fit_pseudotime_models(sce, n_cores)
   if(n_cores == 1) {
-    p_vals <- sapply(featureNames(sce), gene_pseudotime_test, sce)
+    p_vals <- sapply(names(models), 
+                     function(model_name) gene_pseudotime_test(model_name, sce, full_model = models[[model_name]]))
   } else {
-    p_vals <- unlist(mclapply(featureNames(sce), gene_pseudotime_test, sce, mc.cores = n_cores))
+    p_vals <- unlist(mclapply(names(models), 
+                              function(model_name) gene_pseudotime_test(model_name, sce, full_model = models[[model_name]]), 
+                              mc.cores = n_cores))
   }
   q_vals <- p.adjust(p_vals, method='BH')
   return( data.frame(gene=featureNames(sce), p_val = p_vals, q_val = q_vals))
