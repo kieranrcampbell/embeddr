@@ -22,6 +22,8 @@ library(ggplot2)
 library(ggthemes)
 library(caret)
 library(scater)
+library(cba)
+library(knitr)
 load_all('.')
 data(HSMM)
 
@@ -102,6 +104,7 @@ Once we have picked the genes we want to use for the embedding, we scale them to
 ```{r embedding_highmag, cache=TRUE, fig.align='center', fig.width=6.5, fig.height=4.5}
 set.seed(123)
 sce <- fromCellDataSet(HSMM)
+sce@lowerDetectionLimit <- log10(0.1 + 1) ## monocle lower detection limit is 0.1
 exprs(sce) <- log10(exprs(sce) + 1) 
 
 gene_indices <- match(names(which(genes_for_embedding)), featureNames(sce))
@@ -139,6 +142,7 @@ In the `monocle` paper they show that groups 1 & 3 correspond to differentiating
 ```{r fit-pseudotime, fig.align='center', cache=TRUE}
 sce_23 <- sce[, pData(sce)$cluster %in% c(1,3)]
 sce_23 <- fit_pseudotime(sce_23)
+save(sce_23, file='/net/isi-scratch/kieran/embeddr/embeddr/data/sce_23.Rdata')
 plot_embedding(sce_23)
 ```
 
@@ -158,6 +162,7 @@ So there is good correspondence between the `monocle` and `embeddr` pseudotimes,
 sce_23 <- reverse_pseudotime(sce_23)
 qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$pseudotime) +
   theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
+sce_23 <- reverse_pseudotime(sce_23)
 ```
 
 The overall correlation between the two pseudotime trajectories is `r format(round(cor(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$pseudotime),2), nsmall=2)`, which is pretty good. 
@@ -171,9 +176,7 @@ To plot the genes in pseudotime we need to provide the original gene values for 
 #xp <- select(data.frame(t(x)), one_of(Mp$cell_id))
 genes_to_plot <- row.names(subset(fData(HSMM), 
                                   gene_short_name %in% c("CDK1", "MEF2C", "MYH3", "MYOG","ID1")))
-gene_short_names <- fData(HSMM)[genes_to_plot,]$gene_short_name
-
-plot_in_pseudotime(sce_23, genes_to_plot, gene_short_names)
+plot_in_pseudotime(sce_23[genes_to_plot,])
 ```
 
 which is largely similar to the monocle equivalent.
@@ -184,6 +187,16 @@ We can also plot a heatmap of all the genes in pseudotime:
 plot_heatmap(sce_23[gene_indices,])
 ```
 
+Let's have a look at the MRF family of transcription factors:
+
+```{r mrf, fig.align='center', cache=TRUE}
+mrf <- c('MYOD1', 'MYF5', 'MYF6', 'MYOG') 
+mrf_ind <- sapply(mrf, match, fData(sce_23)$gene_short_name)
+
+plot_in_pseudotime(sce_23[mrf_ind,])
+
+plot_pseudotime_model(sce_23[mrf_ind,])
+```
 
 ### Robustness to choice of nearest neighbours
 
@@ -263,6 +276,22 @@ ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(cl
   scale_color_fivethirtyeight(name='cluster') + scale_size_continuous(name='log10(count)')
 ```
 
+Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:
+
+```{r co-expression, fig.align='center', cache=TRUE}
+cdk1_ind <- match('CDK1', fData(HSMM)$gene_short_name)
+pdgfra_ind <- match('PDGFRA', fData(HSMM)$gene_short_name)
+is_contaminated <- pData(sce)$cluster == 2
+
+cx <- exprs(sce[c(cdk1_ind, pdgfra_ind), is_contaminated])
+cx <- data.frame(t(cx))
+names(cx) <- c('CDK1','PDGFRA')
+ggplot(data=cx) + geom_point(aes(x=CDK1, y=PDGFRA)) +
+  theme_minimal() + xlab('CDK1 expression log10(FPKM + 1)') +
+  ylab('PDGFRA expression log10(FPKM + 1)') + 
+  ggtitle('Coexpression of PDGFRA and CDK1 in contaminated cells')
+```
+
 Subsample to check robustness:
 
 ```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8, fig.align='center'}
@@ -332,3 +361,128 @@ qplot(corrs) + theme_minimal() +
   ggtitle('Correlation between sampled pseudotimes') +
   xlab('Correlation')
 ```
+
+
+## Modelling genes in pseudotime
+
+Model a single gene in pseudotime:
+
+```{r model_pseudotime, cache=TRUE, fig.align='center'}
+cdk1 <- row.names(subset(fData(HSMM),  gene_short_name == 'CDK1'))
+sce_23@lowerDetectionLimit <- log10(1 + 0.1)
+model <- fit_pseudotime_model(sce_23, cdk1)
+null_model <- fit_null_model(sce_23, cdk1)
+p_val <- compare_models(model, null_model)
+plot_pseudotime_model(sce_23[cdk1, ], model)
+
+```
+
+Now try all of them:
+
+```{r all-genes, cache=TRUE, warning=FALSE}
+n_cells_expressed <- rowSums(isExprs(sce_23))
+keep_gene <- n_cells_expressed > 0.2 * dim(sce_23)[2]
+sce_23_kept <- sce_23[keep_gene,]
+
+## can optionally use pre-computed models in the pseudotime test function. 
+## this is really handy as we can keep these around for predicting and plotting
+## without having to compute them every time
+diff_gene_test <- pseudotime_test(sce_23_kept)
+print(head(diff_gene_test))
+```
+
+And plot p-vals:
+
+```{r plot-p, cache=TRUE, fig.align='center'}
+qplot(diff_gene_test$p_val, binwidth = 0.01) + theme_bw() + xlab('p-value') 
+qplot(diff_gene_test$q_val, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
+
+alpha <- 0.01
+sig_genes <- diff_gene_test$gene[diff_gene_test$q_val < alpha]
+sce_sig <- sce_23_kept[sig_genes,]
+print(sce_sig)
+```
+
+Now we can calulate the predicted expression matrix:
+```{r predicted-expression, cache=TRUE}
+## let's get the predicted expression matrix from the models
+pe <- predicted_expression(sce_sig)
+
+```
+
+And we can plot the correlation plot:
+```{r correlation-plot,  fig.width=9, fig.height=5, fig.align='center', cache=TRUE}
+pcor <- cor(pe)
+dist_cor <- 1 - pcor / 2 
+hc <- hclust(as.dist(dist_cor))
+plot(hc, labels=FALSE)
+
+# co <- order.optimal(as.dist(dist_cor), hc$merge)$order
+# po <- order(pData(sce_23)$pseudotime)
+# exprs_ordered <- pcor[co, po] 
+# 
+# exprs_ordered <- t(scale(t(exprs_ordered)))
+# rownames(exprs_ordered) <- NULL
+# heatmap.2(exprs_ordered, Rowv=TRUE, Colv=NULL, dendrogram='row', density.info='none', keysize=1,
+#           trace='none', sepwidth=c(0,0), breaks=seq(from=-1, to=1, by=0.1), 
+#           col=colorRampPalette(c('dodgerblue3','white','brown3'))(20)) #matlab.like(20))
+
+```
+
+Now look at conserved modules:
+```{r plot-modules, fig.width=8, fig.height=9, cache=TRUE}
+n_cuts <- 5
+gene_classes <- cutree(hc, n_cuts)
+      
+df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
+
+pe <- data.frame(scale(pe)) ## scaled pst-by-gene
+pe$pseudotime <- pseudotime(sce_sig)
+## save(pe, df_gene, file='~/pe.Rdata')
+
+pe_melted <- melt(pe, id.vars='pseudotime', value.name='expression', variable.name='gene')
+pe_melted <- inner_join(pe_melted, df_gene)
+
+## we want to plot the mean expression rather than all of it (messy)
+gp_groups <- group_by(pe_melted, class, pseudotime)
+mean_expr_per_group <- dplyr::summarise(gp_groups, mean_expr = mean(expression))
+pe_melted <- inner_join(pe_melted, mean_expr_per_group)
+## pe_melted <- arrange(pe_melted, gene, pseudotime)
+
+ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
+  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  theme_bw() + ylab('Expression')
+
+```
+
+Now look at enriched GO terms for each class:
+
+```{r enrich-go, cache=TRUE, message=FALSE, warning=FALSE}
+library(goseq)
+
+genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
+gene_names <- df_gene$gene
+gene_names <- sapply(as.character(gene_names), function(gn) strsplit(gn, '[.]')[[1]][1])
+rownames(genes_per_class) <- gene_names
+
+enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
+  pwf <- nullp(gene_set, 'hg19', 'ensGene', plot.fit=FALSE)
+  go <- goseq(pwf, 'hg19', 'ensGene', test.cats=c('GO:BP'))
+  go$qval <- p.adjust(go$over_represented_pvalue, method='BH')
+  go <- dplyr::filter(go, qval < 0.01)
+  return(dplyr::select(go, category, qval, term))
+  })
+
+reduced <- lapply(enriched_terms, head, 4)
+
+```
+
+Now print the terms:
+
+```{r print-table, results='asis'}
+kable(reduced[[1]])#, format='markdown')
+```
+  
+  
+  
+  

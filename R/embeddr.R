@@ -25,6 +25,7 @@
 #' \item \code{floor} If the above case occurs set the link weight to 0 (ie take the floor of the mean case)
 #' }
 #'
+#' @export
 #' @return An n by n adjacency matrix
 weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
                            metric=c('correlation', 'euclidean'),
@@ -91,6 +92,8 @@ weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
 #' @param W Weight matrix
 #' @param type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
 #' @param p Dimension of the embedded space, default is 2
+#' 
+#' @export
 #'
 #' @return The p-dimensional embedding
 laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
@@ -134,6 +137,7 @@ laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
 #'
 #' @param The SCESet object
 #' @param ignore_weights If TRUE weights are discretised to 0 - 1
+#' @export
 #' @return A ggplot histogram of weights
 plot_degree_dist <- function(W, ignore_weights = FALSE) {
   x <- NULL
@@ -156,6 +160,7 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' @param The SCESet object
 #' @param k The number of clusters to find in the data
 #' @param method Either 'kmeans' or 'mm' to use \code{mclust}
+#' @export
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
@@ -215,6 +220,8 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' @param sce The SCESet object
 #' @param clusters The (numeric) clusters to use for the curve fitting. If NULL (default) then
 #' all points are used
+#' 
+#' @export
 #'
 #' @return The dataframe \code{M} with three new variables:
 #' \describe{
@@ -243,6 +250,8 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #'
 #' @param sce The SCESet object
 #' @param color_by The variable to color the embedding with (defaults to cluster)
+#' 
+#' @export
 #'
 #' @return A \code{ggplot2} plot
 plot_embedding <- function(sce, color_by = 'cluster') {
@@ -298,6 +307,8 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'  @param short_names Short gene names to display; default NULL and \code{genes} is used for gene names
 #'  @param nrow Number of rows of plots; passed to \code{facet_wrap}
 #'  @param ncol Number of columns of plots; passed to \code{facet_wrap}
+#'  
+#'  @export
 #'
 #'  @return A \code{ggplot2} plot
 plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE) {
@@ -334,6 +345,8 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = 
 #' Reverse the pseudotimes of cells
 #'
 #' @param M A dataframe containing a pseudotime variable to be reversed
+#' 
+#' @export
 #' @return A dataframe with the reversed pseudotime
 reverse_pseudotime <- function(sce) {
   reverse <- function(x) -x + max(x) + min(x)
@@ -349,6 +362,11 @@ plot_heatmap <- function(sce, ...) {
             col=redblue(256), trace="none", density.info="none", scale="row", ...)
 }
 
+#' Plot the nearest neighbour graph in the embedding
+#' 
+#' @export
+#' 
+#' @return A ggplot graphic
 plot_graph <- function(sce, W) {
   df <- dplyr::select(pData(sce), x = component_1, y = component_2)
 
@@ -385,9 +403,11 @@ plot_graph <- function(sce, W) {
 #' 
 #' @param sce An object of type SCESet
 #' @param gene The gene name to fit 
+#' @export
 #'
 #' @return An object of class VGAM
 fit_pseudotime_model <- function(sce, gene) {
+  library(VGAM)
   t <- pData(sce)$pseudotime
   y <- exprs(sce)[gene ,]
   min_expr <- sce@lowerDetectionLimit # see paper
@@ -396,6 +416,7 @@ fit_pseudotime_model <- function(sce, gene) {
   tryCatch({
     fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
   }, error = function(e) {
+    warning('VGAM could not fit tobit model. Returning NULL, which returns p-val 1')
     fit <- NULL
   })
   return( fit )
@@ -409,6 +430,7 @@ fit_pseudotime_model <- function(sce, gene) {
 #'
 #' @param sce The SCESet object
 #' @param gene The gene name to fit
+#' @export
 #' 
 #' @return An object of class VGAM
 fit_null_model <- function(sce, gene) {
@@ -421,9 +443,11 @@ fit_null_model <- function(sce, gene) {
 #' Plot the fit in pseudotime
 #'
 #' @param sce An object of class SCE set 
-#' @param model A list of models returned by fit_pseudotime_models. If NULL (default), these will be
+#' @param models A list of models returned by fit_pseudotime_models. If NULL (default), these will be
 #' re-calculated
 #' @param n_cores Number of cores to use when calculating the pseudotime models if `model` is NULL
+#' 
+#' @export
 #' 
 #' @return An plot object from \code{ggplot}
 plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
@@ -469,6 +493,8 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
 #'
 #' @param model The full model y ~ pseudotime
 #' @param null_model The null model y ~ 1
+#' 
+#' @export
 #'
 #' @return The p-value
 compare_models <- function(model, null_model) {
@@ -480,6 +506,13 @@ compare_models <- function(model, null_model) {
 }
 
 #' Test a single gene as a function of pseudotime
+#' 
+#' @param gene_name Name of the gene to be tested. Must be consistent with `featureNames(sce)`
+#' @param sce An object of class SCESet
+#' @param full_model If a full pseudotime model has already been calculated, use that. Otherwise (if NULL, default),
+#' recalculate one on the fly.
+#' 
+#' @export
 gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
   #print(gene_name)
   tryCatch({
@@ -496,22 +529,27 @@ gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
 }
 
 #' pseudotime gene testing
-pseudotime_test <- function(sce, models = NULL, n_cores = 2) {
+#' 
+#' @export
+#' 
+pseudotime_test <- function(sce, n_cores = 2) {
   p_vals <- NULL
-  if(is.null(models)) models <- fit_pseudotime_models(sce, n_cores)
   if(n_cores == 1) {
-    p_vals <- sapply(names(models), 
-                     function(model_name) gene_pseudotime_test(model_name, sce, full_model = models[[model_name]]))
+    p_vals <- sapply(featureNames(sce), 
+                     function(gene_name) gene_pseudotime_test(gene_name, sce))
   } else {
-    p_vals <- unlist(mclapply(names(models), 
-                              function(model_name) gene_pseudotime_test(model_name, sce, full_model = models[[model_name]]), 
-                              mc.cores = n_cores))
+    p_vals <- unlist(mclapply(featureNames(sce), 
+                              function(gene_name) gene_pseudotime_test(gene_name, sce)))
   }
   q_vals <- p.adjust(p_vals, method='BH')
   return( data.frame(gene=featureNames(sce), p_val = p_vals, q_val = q_vals))
 }
 
-#' return a list of pseudotime models in sce
+#' Generate a list of pseudotime models corresponding to ALL genes in sce
+#' 
+#' \strong{WARNING}: The list returned can be huge, so use only on a few genes. 
+#' 
+#' @export
 fit_pseudotime_models <- function(sce, n_cores = 2) {
   models <- NULL
   fpm_wrapper <- function(gene, sce) fit_pseudotime_model(sce, gene)
@@ -525,15 +563,40 @@ fit_pseudotime_models <- function(sce, n_cores = 2) {
 }
 
 #' Create a predicted expression matrix
+#' 
+#' @export
 predicted_expression <- function(sce, models = NULL, n_cores = 2) {
-  if(is.null(models))  models <- fit_pseudotime_models(sce, n_cores)
-  predict_list <- lapply(models, function(x) predict(x)[,1])
-  return( do.call('cbind', predict_list) )
+  if(!is.null(models)) {  
+    if(class(models) == 'list') {
+      predict_list <- lapply(models, function(x) predict(x)[,1])
+      return( do.call('cbind', predict_list) )
+    } else {
+      return(predict(models)[,1])
+    }
+  } else {
+    ## want to calculate models one-at-a-time to make sure they don't take
+    ## up too much space in memory
+    names_not_null <- NULL
+    predict_list <- lapply(featureNames(sce), function(gene_name) {
+      fit <- fit_pseudotime_model(sce, gene_name)
+      if(is.null(fit)) {
+        warning(paste('Fit', gene_name, 'returned null'))
+        return(NULL)
+      }
+      names_not_null <<- c(names_not_null, gene_name)
+      return(predict(fit)[,1])
+    })
+    pred_mat <- do.call('cbind', predict_list)
+    colnames(pred_mat) <- names_not_null
+    return(pred_mat)
+  }
 }
   
 #' Plot density of cells in pseudotime
 #' 
 #' @param sce An object of class SCESet
+#' 
+#' @export
 #' @return A `ggplot` object
 plot_pseudotime_density <- function(sce) {
   t <- pData(sce)$pseudotime
@@ -541,6 +604,13 @@ plot_pseudotime_density <- function(sce) {
     xlab('Pseudotime') + ylab('Cellular density')
 }
 
+#' Plot metrics in pseudotime
+#' 
+#' Plot various metrics (mean, variance, CV2 and signal-to-noise ratio) using
+#' a sliding window approach
+#' 
+#' @export
+#' @return A ggplot graphic
 plot_pseudotime_metrics <- function(sce, gene, window_size=NULL) {
   df_window <- calculate_metrics(sce, gene, window_size)
   df_window <- melt(df_window, id='t')
@@ -548,6 +618,14 @@ plot_pseudotime_metrics <- function(sce, gene, window_size=NULL) {
     theme_bw() + xlab('Pseudotime')
 }
 
+#' Calculate metrics through pseudotime
+#' 
+#' Calculate various metrics (mean, variance, CV2 and signal-to-noise ratio) using
+#' a sliding window approach
+#' 
+#' @export
+#' @return An object of class `data.frame` where each column is a metric (window-averaged pseudotime,
+#' mean, variance, CV2, signal to noise ratio)
 calculate_metrics <- function(sce, gene, window_size=NULL) {
   t <- pData(sce)$pseudotime
   y <- exprs(sce)[gene,]
@@ -571,5 +649,11 @@ calculate_metrics <- function(sce, gene, window_size=NULL) {
   return(df_window)
 }
 
-
+#' Retrieve the pseudotime assignment from sce
+#' 
+#' @return A numeric vector of pseudotimes
+pseudotime <- function(sce) {
+  if(class(sce) != 'SCESet') stop('sce must be of class SCESet')
+  return(pData(sce)$pseudotime)
+}
 
