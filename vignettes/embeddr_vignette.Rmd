@@ -13,17 +13,18 @@ output:
 Here we show how `embeddr` (= spectral embedding + principal curves) can be used for pseudotemporal ordering of single-cell gene expression data using the [monocle](http://cole-trapnell-lab.github.io/monocle-release/) dataset.
 
 ```{r load-all, message=FALSE, warning=FALSE}
-library(monocle)
-library(devtools)
-library(reshape2)
-library(plyr)
-library(dplyr)
+library(monocle) ## for monocle data
+library(devtools) ## for package development
+library(reshape2) ## to melt data frames
+library(plyr) 
+library(dplyr) 
 library(ggplot2)
 library(ggthemes)
-library(caret)
-library(scater)
-library(cba)
-library(knitr)
+library(caret) ## for cross validation steps
+library(scater) ## to hold single-cell data
+library(knitr) ## for kable function
+library(goseq) ## for GO enrichment
+library(org.Hs.eg.db) ## for HG19 GO annotations
 load_all('.')
 data(HSMM)
 
@@ -416,21 +417,10 @@ pcor <- cor(pe)
 dist_cor <- 1 - pcor / 2 
 hc <- hclust(as.dist(dist_cor))
 plot(hc, labels=FALSE)
-
-# co <- order.optimal(as.dist(dist_cor), hc$merge)$order
-# po <- order(pData(sce_23)$pseudotime)
-# exprs_ordered <- pcor[co, po] 
-# 
-# exprs_ordered <- t(scale(t(exprs_ordered)))
-# rownames(exprs_ordered) <- NULL
-# heatmap.2(exprs_ordered, Rowv=TRUE, Colv=NULL, dendrogram='row', density.info='none', keysize=1,
-#           trace='none', sepwidth=c(0,0), breaks=seq(from=-1, to=1, by=0.1), 
-#           col=colorRampPalette(c('dodgerblue3','white','brown3'))(20)) #matlab.like(20))
-
 ```
 
 Now look at conserved modules:
-```{r plot-modules, fig.width=8, fig.height=9, cache=TRUE}
+```{r plot-modules, fig.width=8, fig.height=7, cache=TRUE, message=FALSE}
 n_cuts <- 5
 gene_classes <- cutree(hc, n_cuts)
       
@@ -458,8 +448,6 @@ ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
 Now look at enriched GO terms for each class:
 
 ```{r enrich-go, cache=TRUE, message=FALSE, warning=FALSE}
-library(goseq)
-
 genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
 gene_names <- df_gene$gene
 gene_names <- sapply(as.character(gene_names), function(gn) strsplit(gn, '[.]')[[1]][1])
@@ -468,9 +456,9 @@ rownames(genes_per_class) <- gene_names
 enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
   pwf <- nullp(gene_set, 'hg19', 'ensGene', plot.fit=FALSE)
   go <- goseq(pwf, 'hg19', 'ensGene', test.cats=c('GO:BP'))
-  go$qval <- p.adjust(go$over_represented_pvalue, method='BH')
-  go <- dplyr::filter(go, qval < 0.01)
-  return(dplyr::select(go, category, qval, term))
+  go$log_qval <- log10(p.adjust(go$over_represented_pvalue, method='BH'))
+  go <- dplyr::filter(go, log_qval < log10(0.01))
+  return(dplyr::select(go, category, log_qval, term))
   })
 
 reduced <- lapply(enriched_terms, head, 4)
@@ -480,7 +468,9 @@ reduced <- lapply(enriched_terms, head, 4)
 Now print the terms:
 
 ```{r print-table, results='asis'}
-kable(reduced[[1]])#, format='markdown')
+for(i in 1:n_cuts) {
+  print(kable(reduced[[i]], caption = paste('GO terms for cluster', i)))
+}
 ```
   
   
