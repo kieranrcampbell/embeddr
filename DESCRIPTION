@@ -18,4 +18,5 @@ Imports:
   reshape2,
   VGAM,
   lmtest,
-  magrittr
+  magrittr,
+  splines

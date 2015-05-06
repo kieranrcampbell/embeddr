@@ -2,7 +2,10 @@
 title: "Pseudotemporal ordering of cells from the distal lung epithelium"
 author: "Kieran Campbell"
 date: "03/24/2015"
-output: html_document
+output: 
+  html_document:
+    fig_align: center
+    toc: yes
 ---
 
 Initial data processing: first we read in the data and remove bulk transcripts:
@@ -16,6 +19,9 @@ library(splines)
 library(VGAM)
 library(corrplot)
 library(scater)
+library(biomaRt)
+library(org.Mm.eg.db)
+library(goseq)
 embeddr_path <-  "/net/isi-scratch/kieran/embeddr/embeddr" # '~/oxford/embeddr/embeddr' #
 load_all(embeddr_path)
 
@@ -25,6 +31,7 @@ set.seed(123)
 ```{r load-data, cache=TRUE}
 ## load object 'sce' 
 load('/net/isi-scratch/kieran/embeddr/embeddr/data/lung_sce.RData.gz')
+sce@lowerDetectionLimit <- 0 # from paper
 ```
 
 Next we want to fit a noise model to find highly variable genes:
@@ -68,7 +75,7 @@ plot_graph(sce, W)
 It is obvious we have two very separate trajectories; let's consider the pseudotemporal ordering of one only:
 
 ```{r cluster-plot, cache=TRUE, fig.align='center', message=FALSE}
-sce <- cluster_embedding(sce, method='kmeans',k = 4)
+sce <- cluster_embedding(sce, method='kmeans', k = 4)
 plot_embedding(sce)
 
 cl1 <- pData(sce)$cluster %in% 1:3
@@ -82,7 +89,7 @@ plot_embedding(sce_13)
 We can also plot genes in pseudotime:
 
 ```{r plot-ps, cache=TRUE, fig.align='center'}
-plot_in_pseudotime( sce_13 , genes='Fabp5' )
+plot_in_pseudotime( sce_13['Fabp5',] )
 ```
 
 It appears cluster 2 corresponds to `BP` cells, while cluster 1 corresponds to `AT1` and cluster 3 corresponds to `AT2` cells. We'd ideally like to have a pseudotemporal ordering ofr cells as they transition from `BP` to `AT1` and a second transitioning from `BP` to `AT2`. Let's start with the first. From visual inspection there also appear to be some outlier cells mis-classified. Let's remove them before continuing also.
@@ -90,6 +97,7 @@ It appears cluster 2 corresponds to `BP` cells, while cluster 1 corresponds to `
 ```{r ps-1, cache=TRUE, fig.align='center'}
 sce_bp_at1 <- sce[, pData(sce)$cluster %in% c(1,3) & pData(sce)$component_1 < -0.045]
 sce_bp_at1 <- fit_pseudotime(sce_bp_at1)
+sce_bp_at1 <- reverse_pseudotime(sce_bp_at1)
 plot_embedding(sce_bp_at1)
 ```
 
@@ -99,233 +107,283 @@ plot_embedding(sce_bp_at1)
 
 Now we can plot genes just for this in pseudotime:
 ```{r remove-zero-var, cache=TRUE}
-plot_in_pseudotime( sce_bp_at1, genes='Fabp5' )
+gene <- 'Fabp5'
+plot_in_pseudotime( sce_bp_at1[gene,])
 
 ## Remove genes expressed in less than 20% of cells
-removeGenes <- function(sce, p=0.2) {
-  isExprs(sce) <- calcIsExprs(sce, expr_data='exprs')
-  ncells_exprs <- rowSums(isExprs(sce))
-  cells_to_keep <- ncells_exprs > p * dim(sce)[2]
-  return( sce[cells_to_keep, ])
-}
-
-sce_bp_at1 <- removeGenes(sce_bp_at1)
+n_cells_expressed <- rowSums(isExprs(sce_bp_at1))
+keep_gene <- n_cells_expressed > 0.2 * dim(sce_bp_at1)[2]
+sce_bp_at1 <- sce_bp_at1[keep_gene,]
 print(sce_bp_at1)
 ```
 
 We can also fit a pseudotime cubic smoothing spline regression to `Fabp5`:
 
 ```{r plot-fap, cache=TRUE, fig.align='center', fig.width=5.5, fig.height=3.5}
-# t <- pData(sce_bp_at1)$pseudotime
-# y <- exprs(sce_bp_at1)['Fabp5',]
-# min_expr <- 0 # see paper
-gene <- 'Fabp5'
 model <- fit_pseudotime_model(sce_bp_at1, gene)
 null_model <- fit_null_model(sce_bp_at1,  gene)
 p_val <- compare_models(model, null_model)
-plot_pseudotime_model(sce_bp_at1, model, gene) + ggtitle('Fabp5 expression in pseudotime')
-print(p_val)
+plot_pseudotime_model(sce_bp_at1[gene,], model) + ggtitle('Fabp5 expression in pseudotime')
+print(paste('P-value: ', p_val))
 ```
 
 We can then perform the same tests across all genes:
 
 ```{r vary-sig-at1, cache=TRUE}
-test_gene <- function(gene, sce) {
-  tryCatch({
-  model <- embeddr::fit_pseudotime_model(sce, gene)
-  null_model <- embeddr::fit_null_model(sce, gene)
-  return( embeddr::compare_models(model, null_model) )
-  }, error = function(e) {
-    return( 1 ) # if there's an error, just return 1
-  })
-}
-
-sig_tests <- sapply(featureNames(sce_bp_at1), test_gene, sce_bp_at1)
+sce_bp_at1@lowerDetectionLimit <- 0
+diff_gene_test <- pseudotime_test(sce_bp_at1)
 ```
 
 Plot the p-values:
 
 ```{r plot-pval, fig.align='center', cache=TRUE, fig.width=5, fig.height=3.5}
-qplot(sig_tests) + theme_minimal()
+## correct differential gene test
+diff_gene_test <- dplyr::filter(diff_gene_test, p_val < 1)
+diff_gene_test$q_val <- p.adjust(diff_gene_test$p_val, method='BH')
+qplot(diff_gene_test$p_val, binwidth = 0.01) + theme_bw() + xlab('p-value') 
+qplot(diff_gene_test$q_val, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
+alpha <- 0.01
+sig_genes <- diff_gene_test$gene[diff_gene_test$q_val < alpha]
+sce_sig <- sce_bp_at1[sig_genes,]
+
 ```
 
-Adjust the p-values to find significantly varying ones:
-
-```{r sig-vary, cache=TRUE}
-adj_sigs <- p.adjust(sig_tests, method='BH')
-
-alpha <- 0.05
-sig_genes <- names(which(adj_sigs < alpha))
-## sg <- adj_sigs[adj_sigs < alpha]
+```{r print-at1, fig.align='center', fig.height=6, fig.width=9, cache=TRUE}
+plot_pseudotime_model(sce_sig)
 ```
 
 Plot correlations of genes across pseudotime:
-```{r plot-corr, fig.align='center', fig.width=9, fig.height=9}
-exprs_cor <- exprs(sce_bp_at1[sig_genes, ])
-gene_cor <- cor(t(exprs_cor), method = 'spearman')
-corrplot(gene_cor, method='square', order='hclust') 
+```{r plot-corr, fig.align='center', fig.width=9, fig.height=9, cache=TRUE}
+pe <- predicted_expression(sce_sig)
 ```
 
 Look at directionality of genes by hierarchical clustering:
 ```{r corr-clust, fig.align='center', cache=TRUE, fig.width=9}
-dis <- 1 - gene_cor / 2
-ddis <- as.dist(dis)
-
-hc <- hclust(ddis)
+pcor <- cor(pe)
+dist_cor <- 1 - pcor / 2 
+hc <- hclust(as.dist(dist_cor))
 plot(hc)
 ```
 
 Finally plot genes going up or down in pseudotime:
-```{r gene-up, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
-gene_groups <- cutree(hc, 3)
-plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 1])
-plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 2])
-plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 3])
-# plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 4])
-# plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 5])
-# plot_in_pseudotime(sce_bp_at1, sig_genes[gene_groups == 6])
+```{r gene-up, message=FALSE, fig.align='center', cache=TRUE, fig.width=10, fig.height=4}
+n_cuts <- 2
+gene_classes <- cutree(hc, n_cuts)
+      
+df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
+
+pe <- data.frame(scale(pe)) ## scaled pst-by-gene
+pe$pseudotime <- pseudotime(sce_sig)
+## save(pe, df_gene, file='~/pe.Rdata')
+
+pe_melted <- melt(pe, id.vars='pseudotime', value.name='expression', variable.name='gene')
+pe_melted <- inner_join(pe_melted, df_gene)
+
+## we want to plot the mean expression rather than all of it (messy)
+gp_groups <- group_by(pe_melted, class, pseudotime)
+mean_expr_per_group <- dplyr::summarise(gp_groups, mean_expr = mean(expression))
+pe_melted <- inner_join(pe_melted, mean_expr_per_group)
+## pe_melted <- arrange(pe_melted, gene, pseudotime)
+
+ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
+  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  theme_bw() + ylab('Expression')
 
 ```
 
-Let's see if we can cluster genes based on signal-to-noise ratio:
-```{r cluster-snr-bp-at1, cache=TRUE, warning=FALSE, fig.align='center'}
-snrs <- sapply(sig_genes,function(g) {
-  calculate_metrics(sce_bp_at1, g)$`Signal-to-noise ratio`
-})
-print(dim(snrs))
-cors <- cor(snrs, use='pairwise.complete.obs')
-cors[is.na(cors)] <- 0
-corrplot(cors, method='square', order='hclust')
-print(dim(cors))
-dis <- 1 - cors / 2
-ddis <- as.dist(dis)
-hc <- hclust(ddis)
-plot(hc)
+Now look at enriched GO terms for each class:
 
-gene_groups_snr <- cutree(hc, 3)
-print(table(gene_groups, gene_groups_snr))
+```{r enrich-go, cache=TRUE, message=FALSE, warning=FALSE}
+gene_names <- df_gene$gene
 
-vars <- sapply(sig_genes,function(g) {
-  calculate_metrics(sce_bp_at1, g)$Variance
-})
-varcors <- cor(vars, use='pairwise.complete.obs')
-varcors[is.na(varcors)] <- 0
-corrplot(varcors, method='square', order='hclust')
+genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
+rownames(genes_per_class) <- gene_names
+# all_other_genes <- setdiff(featureNames(sce_bp_at1), gene_names)
+# zero_matrix <- matrix(0, nrow=length(all_other_genes), ncol=n_cuts, dimnames=list(all_other_genes))
+# genes_per_class <- rbind(genes_per_class, zero_matrix)
+genes_per_class <- as.data.frame(genes_per_class)
+
+ensembl_mouse <- useMart("ensembl",dataset="mmusculus_gene_ensembl")
+ids <- getBM(attributes=c('mgi_symbol','ensembl_gene_id','gene_biotype'), 
+                     filters='mgi_symbol',values=rownames(genes_per_class), mart=ensembl_mouse)
+id_lengths <- getBM(attributes=c('mgi_symbol','transcript_length'), filters='mgi_symbol',
+                    values=rownames(genes_per_class),
+                    mart=ensembl_mouse)
+
+## time for some sexy dplyr
+by_transcript <- dplyr::group_by(id_lengths, mgi_symbol)
+gene_lengths <- dplyr::summarise(by_transcript, length=sum(transcript_length))
+
+ids <- dplyr::left_join(ids, gene_lengths)
+
+## found_ensembl_id_for <- gene_names %in% ensembl_ids$mgi_symbol
+genes_per_class <- genes_per_class[ids$mgi_symbol, ]
+rownames(genes_per_class) <- ids$ensembl_gene_id
+names(genes_per_class) <- 1:n_cuts
+
+enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
+  pwf <- nullp(gene_set, 'mm10', 'knownGene', bias.data=ids$length, plot.fit = FALSE)
+  go <- goseq(pwf, 'mm10','ensGene', test.cats='GO:BP')
+  go$log_qval <- log10(p.adjust(go$over_represented_pvalue, method='BH'))
+  go <- dplyr::filter(go, log_qval < log10(0.01))
+  go <- dplyr::select(go, category, log_qval, term)
+  names(go) <- c('Category','log10 q-value','Term')
+  return(go)
+  })
+#reduced <- lapply(enriched_terms, head, 4)
 ```
 
-### BP to AT2 transition
+Now print the terms:
 
-Now let's do the same for the transition into AT2:
+```{r print-table, results='asis', cache=TRUE}
+# for(i in 1:n_cuts) {
+#   print(kable(reduced[[i]], caption = paste('GO terms for cluster', i)))
+# }
+print(enriched_terms)
+```
+
+## BP to AT2 transition
 
 ```{r ps-2, cache=TRUE, fig.align='center'}
 sce_bp_at2 <- sce[, pData(sce)$cluster %in% c(1,2) & pData(sce)$component_1 < -0.045]
 sce_bp_at2 <- fit_pseudotime(sce_bp_at2)
 plot_embedding(sce_bp_at2)
-## sce_bp_at2 <- reverse_pseudotime(sce_bp_at2)
 ```
 
-Now we need to get the gene expression matrix confined to the cells we've identified:
-```{r remove-zero-var-2, cache=TRUE}
-plot_in_pseudotime( sce_bp_at2, genes='Fabp5' )
 
-sce_bp_at2 <- removeGenes(sce_bp_at2)
+```{r remove-zero-var2, cache=TRUE}
+gene <- 'Fabp5'
+plot_in_pseudotime( sce_bp_at2[gene,])
+
+## Remove genes expressed in less than 20% of cells
+n_cells_expressed <- rowSums(isExprs(sce_bp_at2))
+keep_gene <- n_cells_expressed > 0.2 * dim(sce_bp_at2)[2]
+sce_bp_at2 <- sce_bp_at2[keep_gene,]
 print(sce_bp_at2)
-
-sig_tests <- sapply(featureNames(sce_bp_at2), test_gene, sce_bp_at2)
 ```
 
-And another look at the p-values:
+We can also fit a pseudotime cubic smoothing spline regression to `Fabp5`:
 
-```{r plot-pval-2, fig.align='center', cache=TRUE, fig.width=5, fig.height=3.5, warning=FALSE}
-qplot(sig_tests) + theme_minimal()
+```{r plot-fap2, cache=TRUE, fig.align='center', fig.width=5.5, fig.height=3.5}
+model <- fit_pseudotime_model(sce_bp_at2, gene)
+null_model <- fit_null_model(sce_bp_at2,  gene)
+p_val <- compare_models(model, null_model)
+plot_pseudotime_model(sce_bp_at2[gene,], model) + ggtitle('Fabp5 expression in pseudotime')
+print(paste('P-value: ', p_val))
 ```
 
+We can then perform the same tests across all genes:
 
-```{r sig-vary-2, cache=TRUE}
-adj_sigs <- p.adjust(sig_tests, method='BH')
+```{r vary-sig-at2, cache=TRUE, message=FALSE}
+sce_bp_at2@lowerDetectionLimit <- 0
+diff_gene_test <- pseudotime_test(sce_bp_at2, n_cores = 2)
+
+```
+
+Plot the p-values:
+
+```{r plot-pval2, fig.align='center', cache=TRUE, fig.width=5, fig.height=3.5, message=FALSE}
+## correct differential gene test
+diff_gene_test <- dplyr::filter(diff_gene_test, p_val < 1)
+diff_gene_test$q_val <- p.adjust(diff_gene_test$p_val, method='BH')
+qplot(diff_gene_test$p_val, binwidth = 0.01) + theme_bw() + xlab('p-value') 
+qplot(diff_gene_test$q_val, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
 alpha <- 0.01
-sig_genes <- names(which(adj_sigs < alpha))
-#sg <- adj_sigs[adj_sigs < alpha]
+sig_genes <- diff_gene_test$gene[diff_gene_test$q_val < alpha]
+sce_sig <- sce_bp_at2[sig_genes,]
+
+```
+
+```{r plot-at2, fig.align='center', fig.height=9, fig.width=9, cache=TRUE}
+plot_pseudotime_model(sce_sig)
 ```
 
 Plot correlations of genes across pseudotime:
-```{r plot-corr-2, fig.align='center', fig.width=9, fig.height=9, cache=TRUE}
-exprs_cor <- exprs(sce_bp_at2[sig_genes, ])
-gene_cor <- cor(t(exprs_cor))
-corrplot(gene_cor, method='square', order='hclust')
+```{r plot-corr2, fig.align='center', fig.width=9, fig.height=9, message=FALSE}
+pe <- predicted_expression(sce_sig)
 ```
 
 Look at directionality of genes by hierarchical clustering:
-```{r corr-clust-2, fig.align='center', cache=TRUE, fig.width=9}
-dis <- 1 - gene_cor / 2
-ddis <- as.dist(dis)
-hc <- hclust(ddis)
+```{r corr-clust2, fig.align='center', cache=TRUE, fig.width=9}
+pcor <- cor(pe)
+dist_cor <- 1 - pcor / 2 
+hc <- hclust(as.dist(dist_cor))
 plot(hc)
-
-```
-
-```{r gene-pattern-2, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
-gene_groups <- cutree(hc, 2)
-plot_in_pseudotime(sce_bp_at2, sig_genes[gene_groups == 1])
-plot_in_pseudotime(sce_bp_at2, sig_genes[gene_groups == 2])
-```
-
-## Variables in pseudotime
-We can look at various metrics as a function of pseudotime using a sliding window approach. For example, we can simple look at the density of cells as a function of pseudotime:
-
-```{r cell-density, cache=TRUE, fig.align='center',fig.width=7, fig.height=3.5}
-plot_pseudotime_density(sce_bp_at1)
-plot_pseudotime_density(sce_bp_at2)
-```
-
-We can also look at other metrics like mean, variance, signal-to-noise ratio and CV. For some genes their 'signal' becomes consolidated as differentiation progresses:
-
-```{r snr-up, cache=TRUE, fig.align='center', fig.width=7, fig.height=3.5}
-plot_pseudotime_metrics(sce_bp_at2, gene='Tspan8')
-```
-
-while for others this degrades:
-```{r snr-down, cache=TRUE, fig.align='center', fig.width=7, fig.height=3.5}
-plot_pseudotime_metrics(sce_bp_at2, gene='Sftpc')
 ```
 
 
-Let's see if we can cluster genes based on signal-to-noise ratio:
-```{r cluster-snr, cache=TRUE, warning=FALSE, fig.align='center'}
-snrs <- sapply(sig_genes,function(g) {
-  calculate_metrics(sce_bp_at2, g)$`Signal-to-noise ratio`
-})
-print(dim(snrs))
-cors <- cor(snrs, use='pairwise.complete.obs')
-cors[is.na(cors)] <- 0
-corrplot(cors, method='square', order='hclust')
-print(dim(cors))
-dis <- 1 - cors / 2
-ddis <- as.dist(dis)
-hc <- hclust(ddis)
-plot(hc)
+Finally plot genes going up or down in pseudotime:
+```{r gene-up2, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
+n_cuts <- 3
+gene_classes <- cutree(hc, n_cuts)
+      
+df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
 
-gene_groups_snr <- cutree(hc, 2)
-print(table(gene_groups, gene_groups_snr))
-```
+pe <- data.frame(scale(pe)) ## scaled pst-by-gene
+pe$pseudotime <- pseudotime(sce_sig)
+## save(pe, df_gene, file='~/pe.Rdata')
 
+pe_melted <- melt(pe, id.vars='pseudotime', value.name='expression', variable.name='gene')
+pe_melted <- inner_join(pe_melted, df_gene)
 
-```{r}
-all_genes <- featureNames(sce_bp_at2)
+## we want to plot the mean expression rather than all of it (messy)
+gp_groups <- group_by(pe_melted, class, pseudotime)
+mean_expr_per_group <- dplyr::summarise(gp_groups, mean_expr = mean(expression))
+pe_melted <- inner_join(pe_melted, mean_expr_per_group)
+## pe_melted <- arrange(pe_melted, gene, pseudotime)
 
-## convert to ensembl IDs
-# library(biomaRt)
-# library(org.Mm.eg.db)
-# ensembl_mouse <- useMart("ensembl",dataset="mmusculus_gene_ensembl")
-# ensembl_ids <- getBM(attributes=c('mgi_symbol','ensembl_gene_id'), 
-#                      filters='mgi_symbol',values=all_genes, mart=ensembl_mouse)
-# 
-# is_de <- as.numeric(ensembl_ids$mgi_symbol %in% sig_genes[gene_groups == 2])
-# names(is_de) <- ensembl_ids$ensembl_gene_id
-# is_de <- is_de[unique(names(is_de))]
-# table(is_de)
-# 
-# pwf <- nullp(is_de, 'mm10', 'ensGene')
-# GO <- goseq(pwf, 'mm10','ensGene', method='Hypergeometric', test.cats='GO:BP')
+ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
+  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  theme_bw() + ylab('Expression')
 
 ```
+
+Now look at enriched GO terms for each class:
+
+```{r enrich-go-2, cache=TRUE, message=FALSE, warning=FALSE}
+gene_names <- df_gene$gene
+
+genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
+rownames(genes_per_class) <- gene_names
+# all_other_genes <- setdiff(featureNames(sce_bp_at1), gene_names)
+# zero_matrix <- matrix(0, nrow=length(all_other_genes), ncol=n_cuts, dimnames=list(all_other_genes))
+# genes_per_class <- rbind(genes_per_class, zero_matrix)
+genes_per_class <- as.data.frame(genes_per_class)
+
+ensembl_mouse <- useMart("ensembl",dataset="mmusculus_gene_ensembl")
+ids <- getBM(attributes=c('mgi_symbol','ensembl_gene_id','gene_biotype'), 
+                     filters='mgi_symbol',values=rownames(genes_per_class), mart=ensembl_mouse)
+id_lengths <- getBM(attributes=c('mgi_symbol','transcript_length'), filters='mgi_symbol',
+                    values=rownames(genes_per_class),
+                    mart=ensembl_mouse)
+
+## time for some sexy dplyr
+by_transcript <- dplyr::group_by(id_lengths, mgi_symbol)
+gene_lengths <- dplyr::summarise(by_transcript, length=sum(transcript_length))
+
+ids <- dplyr::left_join(ids, gene_lengths)
+
+## found_ensembl_id_for <- gene_names %in% ensembl_ids$mgi_symbol
+genes_per_class <- genes_per_class[ids$mgi_symbol, ]
+rownames(genes_per_class) <- ids$ensembl_gene_id
+names(genes_per_class) <- 1:n_cuts
+
+enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
+  pwf <- nullp(gene_set, 'mm10', 'knownGene', bias.data=ids$length, plot.fit = FALSE)
+  go <- goseq(pwf, 'mm10','ensGene')#, test.cats='GO:BP')
+  go$log_qval <- log10(p.adjust(go$over_represented_pvalue, method='BH'))
+  go <- dplyr::filter(go, log_qval < log10(0.01))
+  go <- dplyr::select(go, category, log_qval, term)
+  names(go) <- c('Category','log10 q-value','Term')
+  return(go)
+  })
+
+#reduced <- lapply(enriched_terms, head, 4)
+
+```
+
+```{r print-enrich}
+print(enriched_terms)
+
+```
+

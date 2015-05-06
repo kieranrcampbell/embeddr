@@ -1,5 +1,6 @@
 ---
-title: "Laplacian eigenmaps & principal curves for pseudotemporal ordering of single-cell gene expression"
+title: Laplacian eigenmaps & principal curves for pseudotemporal ordering of single-cell
+  gene expression
 author: "Kieran Campbell"
 date: "March 2015"
 output:
@@ -7,6 +8,7 @@ output:
     fig_align: center
     fig_height: 3.8
     fig_width: 5
+    toc: yes
   pdf_document: default
 ---
 
@@ -222,11 +224,11 @@ ggplot(data=embeddings, aes(x=component_1, y=component_2, color=monocle_state)) 
 
 In the original monocle dataset, only a small number of cells were assigned to group 3 ('interstitial mesenchymal cell'). However, our re-analysis suggests it is somewhat a larger with `r sum(pData(sce)$cluster == 2)` cells in total. These cells were identified as mesenchymal cells as they expressed PDGFRA and SPHK1 in high abundances. We can look to see whether in our cell set we've identified more cells that are potentially contamination:
 
-```{r cont1, fig.align='center', cache=TRUE}
+```{r cont1, fig.align='center', cache=TRUE, results='asis'}
 phenoData(sce)$monocle_classification <- mapvalues(pData(sce)$State, from=1:3, c('non-cont','non-cont','cont'))
 phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','cont','non-cont'))
 
-print(table(dplyr::select(pData(sce), monocle_classification, embeddr_classification)))
+print(kable(as.data.frame(table(dplyr::select(pData(sce), monocle_classification, embeddr_classification)))))
 ```
 
 So `embeddr` calls significatnly more cells as contaminated, while calls none as non-contaminated that `monocle` calls contaminated.
@@ -249,15 +251,17 @@ agree_contamination <- apply(dplyr::select(pData(sce), monocle_classification, e
 cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("PDGFRA", "SPHK1")))
 short_names <- fData(HSMM)[cont_genes,]$gene_short_name
 y <- exprs(sce[cont_genes,])
-y <- scale(t(y))
-y <- data.frame(y)
-y <- melt(y, variable.name='gene', value.name='counts')
-y$gene <- mapvalues(y$gene, from = cont_genes, to = short_names)
+#y <- scale(t(y))
+y <- data.frame(t(y))
 y$agree_contamination <- agree_contamination
+y <- melt(y, id.vars='agree_contamination', variable.name='gene', value.name='counts')
+y$gene <- mapvalues(y$gene, from = cont_genes, to = short_names)
+
 ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), y=counts)) + 
   facet_wrap(~gene) + 
   geom_boxplot() + theme_bw() + xlab('') +
-  theme(axis.text.x = element_text(angle = -90, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE)
+  theme(axis.text.x = element_text(angle = -90, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE) +
+  ylab('log10(FPKM + 1) counts') + ggtitle('Expression of contamination markers')
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
@@ -274,7 +278,7 @@ M_y_melted <- melt(M_y, id.vars=c('component_1','component_2','cluster'),
 M_y_melted$gene <- mapvalues(M_y_melted$gene, from = cont_genes, to = short_names)
 ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(cluster))) + 
   geom_point(alpha=0.6) + facet_wrap(~ gene) + theme_bw() +
-  scale_color_fivethirtyeight(name='cluster') + scale_size_continuous(name='log10(count)')
+  scale_color_fivethirtyeight(name='cluster') + scale_size_continuous(name='log10(count)') 
 ```
 
 Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:
@@ -368,14 +372,13 @@ qplot(corrs) + theme_minimal() +
 
 Model a single gene in pseudotime:
 
-```{r model_pseudotime, cache=TRUE, fig.align='center'}
+```{r model_pseudotime, cache=TRUE, fig.align='center', message=FALSE}
 cdk1 <- row.names(subset(fData(HSMM),  gene_short_name == 'CDK1'))
 sce_23@lowerDetectionLimit <- log10(1 + 0.1)
 model <- fit_pseudotime_model(sce_23, cdk1)
 null_model <- fit_null_model(sce_23, cdk1)
 p_val <- compare_models(model, null_model)
 plot_pseudotime_model(sce_23[cdk1, ], model)
-
 ```
 
 Now try all of them:
@@ -388,27 +391,28 @@ sce_23_kept <- sce_23[keep_gene,]
 ## can optionally use pre-computed models in the pseudotime test function. 
 ## this is really handy as we can keep these around for predicting and plotting
 ## without having to compute them every time
-diff_gene_test <- pseudotime_test(sce_23_kept)
-print(head(diff_gene_test))
+diff_gene_test <- pseudotime_test(sce_23_kept, n_cores = 1)
 ```
 
 And plot p-vals:
 
-```{r plot-p, cache=TRUE, fig.align='center'}
+```{r plot-p, cache=TRUE, fig.align='center', warning=FALSE}
 qplot(diff_gene_test$p_val, binwidth = 0.01) + theme_bw() + xlab('p-value') 
 qplot(diff_gene_test$q_val, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
 
 alpha <- 0.01
 sig_genes <- diff_gene_test$gene[diff_gene_test$q_val < alpha]
 sce_sig <- sce_23_kept[sig_genes,]
-print(sce_sig)
 ```
 
+### Identifying gene clusters in pseudotime
+
+Use the predicted expression from the fitted models to cluster genes by pseudotemporal expression:
+
 Now we can calulate the predicted expression matrix:
-```{r predicted-expression, cache=TRUE}
+```{r predicted-expression, cache=TRUE, message=FALSE, warning=FALSE}
 ## let's get the predicted expression matrix from the models
 pe <- predicted_expression(sce_sig)
-
 ```
 
 And we can plot the correlation plot:
@@ -458,7 +462,9 @@ enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
   go <- goseq(pwf, 'hg19', 'ensGene', test.cats=c('GO:BP'))
   go$log_qval <- log10(p.adjust(go$over_represented_pvalue, method='BH'))
   go <- dplyr::filter(go, log_qval < log10(0.01))
-  return(dplyr::select(go, category, log_qval, term))
+  go <- dplyr::select(go, category, log_qval, term)
+  names(go) <- c('Category','log10 q-value','Term')
+  return(go)
   })
 
 reduced <- lapply(enriched_terms, head, 4)
@@ -467,10 +473,11 @@ reduced <- lapply(enriched_terms, head, 4)
 
 Now print the terms:
 
-```{r print-table, results='asis'}
+```{r print-table, results='asis', cache=TRUE}
 for(i in 1:n_cuts) {
   print(kable(reduced[[i]], caption = paste('GO terms for cluster', i)))
 }
+
 ```
   
   

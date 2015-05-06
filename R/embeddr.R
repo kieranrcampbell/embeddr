@@ -466,11 +466,11 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
   names(y) <- gene_names
   
   y$pseudotime <- pData(sce)$pseudotime
-  y_melted <- melt(y, id.vars='pseudotime', value.name='exprs', variable.name='gene')
+  y_melted <- reshape2::melt(y, id.vars='pseudotime', value.name='exprs', variable.name='gene')
   pe <- data.frame(predicted_expression(sce, models))
   names(pe) <- gene_names
   pe$pseudotime <- pData(sce)$pseudotime
-  pe_melted <- melt(pe, id.vars='pseudotime', value.name='predicted', variable.name='gene')
+  pe_melted <- reshape2::melt(pe, id.vars='pseudotime', value.name='predicted', variable.name='gene')
   
   df <- dplyr::full_join(y_melted, pe_melted, by=c('pseudotime','gene'))
   df$predicted[df$predicted < min_expr] <- min_expr
@@ -514,7 +514,6 @@ compare_models <- function(model, null_model) {
 #' 
 #' @export
 gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
-  #print(gene_name)
   tryCatch({
     if(is.null(full_model)) {
       model <- embeddr::fit_pseudotime_model(sce, gene_name)
@@ -524,7 +523,7 @@ gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
     null_model <- embeddr::fit_null_model(sce, gene_name)
     return( embeddr::compare_models(model, null_model) )
   }, error = function(e) {
-    return( 1 ) # if there's an error, just return 1
+    return( 1 ) # if there's an error, just return -1
   })
 }
 
