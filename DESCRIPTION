@@ -16,7 +16,7 @@ Imports:
   Matrix,
   gplots,
   reshape2,
-  VGAM,
+  AER,
   lmtest,
   magrittr,
   splines

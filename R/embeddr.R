@@ -407,20 +407,13 @@ plot_graph <- function(sce, W) {
 #'
 #' @return An object of class VGAM
 fit_pseudotime_model <- function(sce, gene) {
-  library(VGAM)
+  library(AER)
   t <- pData(sce)$pseudotime
   y <- exprs(sce)[gene ,]
   min_expr <- sce@lowerDetectionLimit # see paper
   b <- bs(t, df=3)
-  fit <- NULL
-  tryCatch({
-    fit <- suppressWarnings(vgam(y ~ b, family = tobit(Lower = min_expr)))
-  }, error = function(e) {
-    warning('VGAM could not fit tobit model. Returning NULL, which returns p-val 1')
-    fit <- NULL
-  })
+  fit <- AER::tobit(y ~ b, left = min_expr)
   return( fit )
-  ## lm(y ~ b)
 }
 
 #' Fit the null pseudotime model
@@ -434,10 +427,10 @@ fit_pseudotime_model <- function(sce, gene) {
 #' 
 #' @return An object of class VGAM
 fit_null_model <- function(sce, gene) {
+  library(AER)
   y <- exprs(sce)[gene,]
   min_expr <- sce@lowerDetectionLimit
-  suppressWarnings(vgam(y ~ 1, family = tobit(Lower = min_expr)))
-  #lm(y ~ 1)
+  return( AER::tobit(y ~ 1, left = min_expr) )
 }
 
 #' Plot the fit in pseudotime
@@ -452,7 +445,7 @@ fit_null_model <- function(sce, gene) {
 #' @return An plot object from \code{ggplot}
 plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
   if(is.null(models)) models <- fit_pseudotime_models(sce, n_cores)
-  if(dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene in sce')
+  # if(class(models) == 'list' && dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene in sce')
   
   gene_names <- NULL
   if('gene_short_name' %in% names(fData(sce))) {
@@ -499,10 +492,9 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
 #' @return The p-value
 compare_models <- function(model, null_model) {
   require(lmtest)
-  require(VGAM)
-  lrt <- VGAM::lrtest(model, null_model) # VGAM <-> lmtest
-  #return( lrt$"Pr(>Chisq)"[2] ) # lmtest
-  lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
+  lrt <- lrtest(model, null_model) # VGAM <-> lmtest
+  return( lrt$"Pr(>Chisq)"[2] ) # lmtest
+  #lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
 }
 
 #' Test a single gene as a function of pseudotime
@@ -567,10 +559,10 @@ fit_pseudotime_models <- function(sce, n_cores = 2) {
 predicted_expression <- function(sce, models = NULL, n_cores = 2) {
   if(!is.null(models)) {  
     if(class(models) == 'list') {
-      predict_list <- lapply(models, function(x) predict(x)[,1])
+      predict_list <- lapply(models, function(x) predict(x))
       return( do.call('cbind', predict_list) )
     } else {
-      return(predict(models)[,1])
+      return(predict(models))
     }
   } else {
     ## want to calculate models one-at-a-time to make sure they don't take
@@ -583,7 +575,7 @@ predicted_expression <- function(sce, models = NULL, n_cores = 2) {
         return(NULL)
       }
       names_not_null <<- c(names_not_null, gene_name)
-      return(predict(fit)[,1])
+      return(predict(fit))
     })
     pred_mat <- do.call('cbind', predict_list)
     colnames(pred_mat) <- names_not_null

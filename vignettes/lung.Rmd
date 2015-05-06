@@ -2,9 +2,11 @@
 title: "Pseudotemporal ordering of cells from the distal lung epithelium"
 author: "Kieran Campbell"
 date: "03/24/2015"
-output: 
+output:
   html_document:
     fig_align: center
+    toc: yes
+  pdf_document:
     toc: yes
 ---
 
@@ -19,9 +21,7 @@ library(splines)
 library(VGAM)
 library(corrplot)
 library(scater)
-library(biomaRt)
-library(org.Mm.eg.db)
-library(goseq)
+
 embeddr_path <-  "/net/isi-scratch/kieran/embeddr/embeddr" # '~/oxford/embeddr/embeddr' #
 load_all(embeddr_path)
 
@@ -33,6 +33,9 @@ set.seed(123)
 load('/net/isi-scratch/kieran/embeddr/embeddr/data/lung_sce.RData.gz')
 sce@lowerDetectionLimit <- 0 # from paper
 ```
+
+## Building the embedding
+
 
 Next we want to fit a noise model to find highly variable genes:
 ```{r noise-model, cache=TRUE, fig.align='center'}
@@ -183,66 +186,30 @@ pe_melted <- inner_join(pe_melted, df_gene)
 gp_groups <- group_by(pe_melted, class, pseudotime)
 mean_expr_per_group <- dplyr::summarise(gp_groups, mean_expr = mean(expression))
 pe_melted <- inner_join(pe_melted, mean_expr_per_group)
-## pe_melted <- arrange(pe_melted, gene, pseudotime)
+#pe_melted <- arrange(pe_melted, gene, pseudotime)
 
-ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
-  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
-  theme_bw() + ylab('Expression')
+ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='black') +
+  facet_wrap(~ class) + geom_point(aes(x=pseudotime, y=expression, color=gene), alpha=0.5) + 
+  theme_bw() + ylab('Expression') + guides(color=FALSE)
 
 ```
 
-Now look at enriched GO terms for each class:
+These genes are selectively turned off in AT1 cells, meaning they're markers for AT2 cells. Let's see how what we found compares to those in the original paper:
 
-```{r enrich-go, cache=TRUE, message=FALSE, warning=FALSE}
-gene_names <- df_gene$gene
+```{r marker-at2, cache=TRUE}
+markers2 <- c('Lcn2', 'Hc','Trf','Lyz2','S100g','Lyz1','Fabp5',
+            'Lamp3','Cd36','Scd1','Sftpb','Slc34a2','Abca3','Sftpa1',
+            'Egfl6','Soat1','Bex2','Muc1','Sftpc')
+pseudotime_markers_at2 <- as.character(sig_genes)
 
-genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
-rownames(genes_per_class) <- gene_names
-# all_other_genes <- setdiff(featureNames(sce_bp_at1), gene_names)
-# zero_matrix <- matrix(0, nrow=length(all_other_genes), ncol=n_cuts, dimnames=list(all_other_genes))
-# genes_per_class <- rbind(genes_per_class, zero_matrix)
-genes_per_class <- as.data.frame(genes_per_class)
+print(intersect(markers2, pseudotime_markers_at2))
+print(setdiff(markers2, pseudotime_markers_at2))
+print(setdiff(pseudotime_markers_at2, markers2))
 
-ensembl_mouse <- useMart("ensembl",dataset="mmusculus_gene_ensembl")
-ids <- getBM(attributes=c('mgi_symbol','ensembl_gene_id','gene_biotype'), 
-                     filters='mgi_symbol',values=rownames(genes_per_class), mart=ensembl_mouse)
-id_lengths <- getBM(attributes=c('mgi_symbol','transcript_length'), filters='mgi_symbol',
-                    values=rownames(genes_per_class),
-                    mart=ensembl_mouse)
-
-## time for some sexy dplyr
-by_transcript <- dplyr::group_by(id_lengths, mgi_symbol)
-gene_lengths <- dplyr::summarise(by_transcript, length=sum(transcript_length))
-
-ids <- dplyr::left_join(ids, gene_lengths)
-
-## found_ensembl_id_for <- gene_names %in% ensembl_ids$mgi_symbol
-genes_per_class <- genes_per_class[ids$mgi_symbol, ]
-rownames(genes_per_class) <- ids$ensembl_gene_id
-names(genes_per_class) <- 1:n_cuts
-
-enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
-  pwf <- nullp(gene_set, 'mm10', 'knownGene', bias.data=ids$length, plot.fit = FALSE)
-  go <- goseq(pwf, 'mm10','ensGene', test.cats='GO:BP')
-  go$log_qval <- log10(p.adjust(go$over_represented_pvalue, method='BH'))
-  go <- dplyr::filter(go, log_qval < log10(0.01))
-  go <- dplyr::select(go, category, log_qval, term)
-  names(go) <- c('Category','log10 q-value','Term')
-  return(go)
-  })
-#reduced <- lapply(enriched_terms, head, 4)
 ```
 
-Now print the terms:
 
-```{r print-table, results='asis', cache=TRUE}
-# for(i in 1:n_cuts) {
-#   print(kable(reduced[[i]], caption = paste('GO terms for cluster', i)))
-# }
-print(enriched_terms)
-```
-
-## BP to AT2 transition
+### BP to AT2 transition
 
 ```{r ps-2, cache=TRUE, fig.align='center'}
 sce_bp_at2 <- sce[, pData(sce)$cluster %in% c(1,2) & pData(sce)$component_1 < -0.045]
@@ -296,6 +263,7 @@ sce_sig <- sce_bp_at2[sig_genes,]
 
 ```{r plot-at2, fig.align='center', fig.height=9, fig.width=9, cache=TRUE}
 plot_pseudotime_model(sce_sig)
+
 ```
 
 Plot correlations of genes across pseudotime:
@@ -313,7 +281,7 @@ plot(hc)
 
 
 Finally plot genes going up or down in pseudotime:
-```{r gene-up2, fig.align='center', cache=TRUE, fig.width=10, fig.height=8}
+```{r gene-up2, fig.align='center', cache=TRUE, fig.width=9, fig.height=4, message=FALSE, warning=FALSE}
 n_cuts <- 3
 gene_classes <- cutree(hc, n_cuts)
       
@@ -333,57 +301,48 @@ pe_melted <- inner_join(pe_melted, mean_expr_per_group)
 ## pe_melted <- arrange(pe_melted, gene, pseudotime)
 
 ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
-  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=100) +
   theme_bw() + ylab('Expression')
 
 ```
 
-Now look at enriched GO terms for each class:
+```{r at1-markers, cache=TRUE}
+markers1 <- c('Aqp5','Pdpn','Rtkn2','Ager','Emp2','Cav1','Clic5','Lmo7',
+             'S100a6','Col4a3','Akap5','Cryab','Sdpr','S100a14')
+pseudotime_markers_at1 <- names(gene_classes[gene_classes %in% c(1,2)])
 
-```{r enrich-go-2, cache=TRUE, message=FALSE, warning=FALSE}
-gene_names <- df_gene$gene
-
-genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
-rownames(genes_per_class) <- gene_names
-# all_other_genes <- setdiff(featureNames(sce_bp_at1), gene_names)
-# zero_matrix <- matrix(0, nrow=length(all_other_genes), ncol=n_cuts, dimnames=list(all_other_genes))
-# genes_per_class <- rbind(genes_per_class, zero_matrix)
-genes_per_class <- as.data.frame(genes_per_class)
-
-ensembl_mouse <- useMart("ensembl",dataset="mmusculus_gene_ensembl")
-ids <- getBM(attributes=c('mgi_symbol','ensembl_gene_id','gene_biotype'), 
-                     filters='mgi_symbol',values=rownames(genes_per_class), mart=ensembl_mouse)
-id_lengths <- getBM(attributes=c('mgi_symbol','transcript_length'), filters='mgi_symbol',
-                    values=rownames(genes_per_class),
-                    mart=ensembl_mouse)
-
-## time for some sexy dplyr
-by_transcript <- dplyr::group_by(id_lengths, mgi_symbol)
-gene_lengths <- dplyr::summarise(by_transcript, length=sum(transcript_length))
-
-ids <- dplyr::left_join(ids, gene_lengths)
-
-## found_ensembl_id_for <- gene_names %in% ensembl_ids$mgi_symbol
-genes_per_class <- genes_per_class[ids$mgi_symbol, ]
-rownames(genes_per_class) <- ids$ensembl_gene_id
-names(genes_per_class) <- 1:n_cuts
-
-enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
-  pwf <- nullp(gene_set, 'mm10', 'knownGene', bias.data=ids$length, plot.fit = FALSE)
-  go <- goseq(pwf, 'mm10','ensGene')#, test.cats='GO:BP')
-  go$log_qval <- log10(p.adjust(go$over_represented_pvalue, method='BH'))
-  go <- dplyr::filter(go, log_qval < log10(0.01))
-  go <- dplyr::select(go, category, log_qval, term)
-  names(go) <- c('Category','log10 q-value','Term')
-  return(go)
-  })
-
-#reduced <- lapply(enriched_terms, head, 4)
+print(intersect(markers1, pseudotime_markers_at1))
+print(setdiff(markers1, pseudotime_markers_at1))
+print(setdiff(pseudotime_markers_at1, markers1))
 
 ```
 
-```{r print-enrich}
-print(enriched_terms)
+### Bringing it all together
 
+```{r big-heatmap, fig.align='center', fig.width=8, fig.height=6}
+library(gplots)
+prev_identified_1 <- pseudotime_markers_at1 %in% markers1
+prev_identified_2 <- pseudotime_markers_at2 %in% markers2
+all_pseudotime_markers <- c(pseudotime_markers_at1[prev_identified_1], pseudotime_markers_at1[!prev_identified_1],
+                            pseudotime_markers_at2[prev_identified_2], pseudotime_markers_at2[!prev_identified_2])
+
+previously_identified <- c(rep('Prev', sum(1*prev_identified_1)),
+                           rep('New', sum(!prev_identified_1)),
+                           rep('Prev', sum(1*prev_identified_2)),
+                           rep('New', sum(!prev_identified_2)))
+prev_colors <- plyr::mapvalues(previously_identified, from=c('Prev','New'), to=c('darkgrey','lightgrey'))
+
+cell_type <- pData(sce_13)$putative_cell_type[order(pseudotime(sce_13))]
+cell_colors <- plyr::mapvalues(cell_type, from=c('AT1','BP','AT2'), to=c('orange','black','darkred'))
+
+mm <- exprs(sce_13[all_pseudotime_markers,order(pseudotime(sce_13))])
+my_palette <- colorRampPalette(c("darkblue","white","red"))(n = 100)
+heatmap.2(mm, Colv=FALSE, Rowv=FALSE, col=my_palette, dendrogram='none', trace='none',
+          density.info='none', lhei=c(1, 3), lwid=c(2, 7), ColSideColors=cell_colors, RowSideColors=prev_colors)
+legend("top",      # location of the legend on the heatmap plot
+    legend = c('AT1','BP','AT2'),
+    col = c('orange','black','darkred'),
+    lty= 1,             # line style
+    lwd = 5            # line width
+)
 ```
-
