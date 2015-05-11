@@ -2,7 +2,7 @@
 title: Laplacian eigenmaps & principal curves for pseudotemporal ordering of single-cell
   gene expression
 author: "Kieran Campbell"
-date: "March 2015"
+date: "May 2015"
 output:
   html_document:
     fig_align: center
@@ -104,7 +104,7 @@ ggplot(df_fit, aes(x=m, y=CV2, color = for_embedding)) + geom_point() +
 
 Once we have picked the genes we want to use for the embedding, we scale them to treat them as equal to avoid high magnitude outliers driving the embedding:
 
-```{r embedding_highmag, cache=TRUE, fig.align='center', fig.width=6.5, fig.height=4.5}
+```{r embedding_highmag, cache=TRUE, fig.align='center', fig.width=7.5, fig.height=4.5}
 set.seed(123)
 sce <- fromCellDataSet(HSMM)
 sce@lowerDetectionLimit <- log10(0.1 + 1) ## monocle lower detection limit is 0.1
@@ -115,7 +115,13 @@ sce_embedding <- sce[gene_indices,]
 W <- weighted_graph(sce_embedding, nn = 6, metric='correlation')
 sce <- laplacian_eigenmap(sce, W)
 
-plot_embedding(sce, color_by = 'State')
+sce_tmp <- sce
+phenoData(sce_tmp)$State <- plyr::mapvalues(pData(sce_tmp)$State, from=1:3,
+                                            to=c('Differentiating myoblast',
+                                                 'Proliferating cell',
+                                                 'Contaminating cell'))
+
+plot_embedding(sce_tmp, color_by = 'State')
 ```
 
 We can view the graph of cells to see how connections between different parts form:
@@ -125,9 +131,18 @@ plot_graph(sce, W)
 ```
 
 We can also cluster the embedding using kmeans and plot:
-```{r clust_emb, cache=TRUE, fig.align='center', fig.width=6, fig.height=4.5}
+```{r clust_emb, cache=TRUE, fig.align='center', fig.width=7.5, fig.height=4.5}
 sce <- cluster_embedding(sce, 3)
-plot_embedding(sce)
+
+sce_tmp <- sce
+phenoData(sce_tmp)$cluster <- plyr::mapvalues(pData(sce_tmp)$cluster, from=c(3, 1, 2),
+                                            to=c(1,2,3))
+phenoData(sce_tmp)$cluster <- plyr::mapvalues(pData(sce_tmp)$cluster, from=1:3,
+                                            to=c('Differentiating myoblast',
+                                                 'Proliferating cell',
+                                                 'Contaminating cell'))
+
+plot_embedding(sce_tmp)
 ```
 
 Finally, we want to check the method is different to a more primitive technique such as PCA alone:
@@ -234,7 +249,7 @@ print(kable(as.data.frame(table(dplyr::select(pData(sce), monocle_classification
 So `embeddr` calls significatnly more cells as contaminated, while calls none as non-contaminated that `monocle` calls contaminated.
 
 What we'd like to do is see how the gene markers compare when considering the contamined cells identified by monocle, the contaminated cells we identify, and all other cells:
-```{r cont2, fig.align='center', cache=TRUE, message=FALSE, warning=FALSE}
+```{r cont2, fig.align='center', cache=TRUE, message=FALSE, warning=FALSE, fig.height=4.5, fig.width=6}
 agree_contamination <- apply(dplyr::select(pData(sce), monocle_classification, embeddr_classification), 
                              1, function(x) {
   if(x['monocle_classification'] == 'cont' & x['embeddr_classification'] == 'cont') {
@@ -259,9 +274,9 @@ y$gene <- mapvalues(y$gene, from = cont_genes, to = short_names)
 
 ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), y=counts)) + 
   facet_wrap(~gene) + 
-  geom_boxplot() + theme_bw() + xlab('') +
+  geom_boxplot(outlier.shape=NA) + geom_jitter(alpha=0.5) +  theme_bw() + xlab('') +
   theme(axis.text.x = element_text(angle = -90, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE) +
-  ylab('log10(FPKM + 1) counts') + ggtitle('Expression of contamination markers')
+  ylab('log10(FPKM + 1) counts') + ggtitle('Expression of contamination markers') 
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
@@ -424,8 +439,8 @@ plot(hc, labels=FALSE)
 ```
 
 Now look at conserved modules:
-```{r plot-modules, fig.width=8, fig.height=7, cache=TRUE, message=FALSE}
-n_cuts <- 5
+```{r plot-modules, fig.width=2.5, fig.height=8, cache=TRUE, message=FALSE}
+n_cuts <- 6
 gene_classes <- cutree(hc, n_cuts)
       
 df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
@@ -444,9 +459,30 @@ pe_melted <- inner_join(pe_melted, mean_expr_per_group)
 ## pe_melted <- arrange(pe_melted, gene, pseudotime)
 
 ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
-  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  facet_wrap(~ class, ncol = 1) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
   theme_bw() + ylab('Expression')
 
+```
+
+Number of genes in each class:
+
+```{r genes-per-class, cache=TRUE, results='asis'}
+genes_per_class <- sapply(1:n_cuts, function(i) sum(gene_classes == i))
+df_gpc <- data.frame(Class=1:n_cuts, 'Number in class' = genes_per_class)
+print(kable(df_gpc, caption='Genes per class'))
+
+
+names(gene_classes) <- sapply(as.character(names(gene_classes)), function(gn) strsplit(gn, '[.]')[[1]][1])
+
+base_name <- "/net/isi-scratch/kieran/embeddr/embeddr/data/"
+for(i in 1:n_cuts) {
+  filename <- paste0(base_name, 'genes_', i,'.txt')
+  conn <- file(filename)
+  gn <- names(which(gene_classes == i))
+
+  writeLines(gn, conn)
+  close(conn)
+}
 ```
 
 Now look at enriched GO terms for each class:
@@ -454,8 +490,14 @@ Now look at enriched GO terms for each class:
 ```{r enrich-go, cache=TRUE, message=FALSE, warning=FALSE}
 genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
 gene_names <- df_gene$gene
+all_genes <- featureNames(sce_23_kept)
 gene_names <- sapply(as.character(gene_names), function(gn) strsplit(gn, '[.]')[[1]][1])
-rownames(genes_per_class) <- gene_names
+all_genes <- sapply(as.character(all_genes), function(gn) strsplit(gn, '[.]')[[1]][1])
+
+genes_not_de <- setdiff(all_genes, gene_names)
+genes_per_class <- rbind(genes_per_class, matrix(0, ncol=ncol(genes_per_class), nrow=length(genes_not_de)))
+
+rownames(genes_per_class) <- c(gene_names, genes_not_de)
 
 enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
   pwf <- nullp(gene_set, 'hg19', 'ensGene', plot.fit=FALSE)
@@ -467,8 +509,7 @@ enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
   return(go)
   })
 
-reduced <- lapply(enriched_terms, head, 4)
-
+reduced <- lapply(enriched_terms, head, 6)
 ```
 
 Now print the terms:
