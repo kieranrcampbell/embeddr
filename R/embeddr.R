@@ -286,13 +286,15 @@ plot_embedding <- function(sce, color_by = 'cluster') {
       plt <- plt + scale_color_discrete(name = color_by)
     }
 
-    if("pseudotime" %in% names(M)) {
-      ## curve has been fit so plot all
-      plt <- plt + geom_path(aes(x = trajectory_1, y = trajectory_2), data=M, color='black',
-                             size = 1, alpha = 0.7, linetype=2)
-    }
+
   } else {
     plt <- plt + geom_point(aes(x = component_1, y = component_2))
+  }
+
+  if("pseudotime" %in% names(M)) {
+    ## curve has been fit so plot all
+    plt <- plt + geom_path(aes(x = trajectory_1, y = trajectory_2), data=M, color='black',
+                           size = 1, alpha = 0.7, linetype=2)
   }
   return( plt )
 }
