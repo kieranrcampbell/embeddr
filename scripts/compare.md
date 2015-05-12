@@ -1,10 +1,10 @@
+# Compare monocle and embeddr's relative speed
+## Kieran Campbell 
 
-#' # Compare monocle and embeddr's relative speed
-#' ## Kieran Campbell 
-#' 
-#' First load the data:
+First load the data:
 
-#+ setup, message=FALSE, cache=TRUE
+
+```r
 set.seed(123)
 
 library(monocle)
@@ -28,17 +28,16 @@ sce <- sce_23
 sce@lowerDetectionLimit <- log10(0.1 + 1)
 
 min_fpkm <- 1
+```
+
+## Dimensionality reduction performance
+
+### Varying number of cells 
+Here we randomly subsample cells and look at how the average speed of ten
+dimensionality reductions varies for each algorithm. 
 
 
-
-
-#' ## Dimensionality reduction performance
-#' 
-#' ### Varying number of cells 
-#' Here we randomly subsample cells and look at how the average speed of ten
-#' dimensionality reductions varies for each algorithm. 
-
-#+ compare-times, message=FALSE, fig.width=7, fig.height=4
+```r
 sce <- fromCellDataSet(HSMM)
 exprs(sce) <- log10(exprs(sce) + 1)
 sce@lowerDetectionLimit <- log10(0.1 + 1)
@@ -63,8 +62,23 @@ embeddr_time_helper <- function(sce) {
 }
 
 monocle_time_helper(cds)
-embeddr_time_helper(sce[use_for_ordering,])
+```
 
+```
+## user.self 
+##    0.8504
+```
+
+```r
+embeddr_time_helper(sce[use_for_ordering,])
+```
+
+```
+## user.self 
+##    0.0877
+```
+
+```r
 set.seed(123)
 cells_to_subsample <- seq(from=50, to=dim(sce)[2], length.out=10)
 
@@ -84,16 +98,16 @@ df_melted <- melt(df_times, id.vars = 'n_cells', variable.name='Algorithm', valu
 ggplot(df_melted, aes(x=n_cells, y=time, col=Algorithm)) + 
   geom_line() + geom_point() + theme_minimal() +
   xlab('Number of cells') + ylab('Avg 10 sys time (s)') 
+```
+
+![plot of chunk compare-times](figure/compare-times-1.png) 
+
+### Varying number of cells
+Here instead we vary the number of cells and see how long the average for 10 dimensionality
+reductions takes.
 
 
-#' ### Varying number of cells
-#' Here instead we vary the number of cells and see how long the average for 10 dimensionality
-#' reductions takes.
-
-#+ compare-genes, message=FALSE, warning=FALSE, cache=TRUE, fig.width=7, fig.height=4
-
-
-
+```r
 genes_to_subsample <- seq(from = 50, to= round(length(featureNames(sce)) / 10 ), length.out=10)
 
 gene_subsample_times <- sapply(genes_to_subsample, function(i) {
@@ -113,17 +127,21 @@ df_melted_genes <- melt(df_genes, id.vars = 'n_genes', variable.name='Algorithm'
 ggplot(df_melted_genes, aes(x=n_genes, y=time, col=Algorithm)) + 
   geom_line() + geom_point() + theme_minimal() +
   xlab('Number of genes') + ylab('Avg 10 sys time (s)') 
+```
+
+![plot of chunk compare-genes](figure/compare-genes-1.png) 
+
+## Timing to fit pseudotime 
+
+Here we look at the relative times to fit the pseudotime trajectory. Subsampling of cells would be unfair
+to either algorithm so we take a very annecdotal look at it:
 
 
 
-#' ## Timing to fit pseudotime 
-#' 
-#' Here we look at the relative times to fit the pseudotime trajectory. Subsampling of cells would be unfair
-#' to either algorithm so we take a very annecdotal look at it:
+### Embeddr
 
-#+ fit-pseudotime, fig.width=7, fig.height=7, cache=TRUE, message=FALSE, warning=FALSE
 
-#' ### Embeddr
+```r
 x <- t(log10(exprs(HSMM) + 1))
 x_mean <- colMeans(x)
 x_var <- apply(x, 2, var)
@@ -140,12 +158,47 @@ W <- weighted_graph(sce[genes_for_embedding,])
 sce <- laplacian_eigenmap(sce, W)
 sce <- cluster_embedding(sce, k=2, method='mm')
 system.time(sce <- fit_pseudotime(sce, clusters = 1))
+```
+
+```
+##    user  system elapsed 
+##   0.022   0.001   0.024
+```
+
+```r
 plot_embedding(sce)
+```
 
-#' ### Monocle
+```
+## Warning in loop_apply(n, do.ply): Removed 112 rows containing missing
+## values (geom_path).
+```
 
+![plot of chunk unnamed-chunk-1](figure/unnamed-chunk-1-1.png) 
+
+### Monocle
+
+
+```r
 cds <- reduceDimension(HSMM, use_irlba = FALSE)
+```
 
+```
+## Reducing to independent components
+```
+
+```r
 system.time(cds <- orderCells(cds, num_paths = 2, reverse = TRUE))
+```
+
+```
+##    user  system elapsed 
+##   4.553   0.001   4.555
+```
+
+```r
 plot_spanning_tree(cds)
+```
+
+![plot of chunk unnamed-chunk-2](figure/unnamed-chunk-2-1.png) 
 
