@@ -66,7 +66,7 @@ monocle_time_helper(cds)
 
 ```
 ## user.self 
-##    0.8504
+##      0.85
 ```
 
 ```r
@@ -75,7 +75,7 @@ embeddr_time_helper(sce[use_for_ordering,])
 
 ```
 ## user.self 
-##    0.0877
+##    0.0872
 ```
 
 ```r
@@ -135,9 +135,6 @@ ggplot(df_melted_genes, aes(x=n_genes, y=time, col=Algorithm)) +
 
 Here we look at the relative times to fit the pseudotime trajectory. Subsampling of cells would be unfair
 to either algorithm so we take a very annecdotal look at it:
-
-
-
 ### Embeddr
 
 
@@ -162,43 +159,32 @@ system.time(sce <- fit_pseudotime(sce, clusters = 1))
 
 ```
 ##    user  system elapsed 
-##   0.022   0.001   0.024
+##   0.022   0.000   0.024
 ```
 
 ```r
 plot_embedding(sce)
 ```
 
-```
-## Warning in loop_apply(n, do.ply): Removed 112 rows containing missing
-## values (geom_path).
-```
-
-![plot of chunk unnamed-chunk-1](figure/unnamed-chunk-1-1.png) 
+![plot of chunk fit-pseudotime-embeddr](figure/fit-pseudotime-embeddr-1.png) 
 
 ### Monocle
 
 
 ```r
 cds <- reduceDimension(HSMM, use_irlba = FALSE)
-```
 
-```
-## Reducing to independent components
-```
-
-```r
 system.time(cds <- orderCells(cds, num_paths = 2, reverse = TRUE))
 ```
 
 ```
 ##    user  system elapsed 
-##   4.553   0.001   4.555
+##   4.686   0.000   4.689
 ```
 
 ```r
 plot_spanning_tree(cds)
 ```
 
-![plot of chunk unnamed-chunk-2](figure/unnamed-chunk-2-1.png) 
+![plot of chunk fit-pseudotime-monocle](figure/fit-pseudotime-monocle-1.png) 
 
