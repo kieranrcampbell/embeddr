@@ -232,13 +232,24 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
   library(princurve)
   library(dplyr)
   M <- dplyr::select(pData(sce), component_1, component_2)
-  if(!is.null(clusters)) M <- M[pData(sce)$cluster %in% clusters, ]
-  pc <- principal.curve(x = as.matrix(dplyr::select(M, component_1, component_2)), ...)
+  n_cells <- dim(sce)[2]
+  
+  cells_in_cluster <- rep(TRUE, n_cells)
+  if(!is.null(clusters)) cells_in_cluster <- pData(sce)$cluster %in% clusters
+  
+  Mcl <- M[cells_in_cluster, ]
+  pc <- principal.curve(x = as.matrix(dplyr::select(Mcl, component_1, component_2)), ...)
   pst <- pc$lambda
   pst <- (pst - min(pst)) / (max(pst) - min(pst))
-  phenoData(sce)$pseudotime <- pst
-  phenoData(sce)$trajectory_1 <- pc$s[,1]
-  phenoData(sce)$trajectory_2 <- pc$s[,2]
+  
+  pseudotime <- trajectory_1 <- trajectory_2 <- rep(NA, n_cells)
+  pseudotime[cells_in_cluster] <- pst
+  trajectory_1[cells_in_cluster] <- pc$s[,1]
+  trajectory_2[cells_in_cluster] <- pc$s[,2]
+  
+  phenoData(sce)$pseudotime <- pseudotime
+  phenoData(sce)$trajectory_1 <- trajectory_1
+  phenoData(sce)$trajectory_2 <- trajectory_2
   return( sce )
 }
 
