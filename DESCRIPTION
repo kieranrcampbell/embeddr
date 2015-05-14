@@ -1,10 +1,10 @@
 Package: embeddr
-Title: Low dimensional embeddings using laplacian eigenmaps for single cell genomics
-Version: 0.0.0.9000
-Authors@R: person("Kieran", "Campbell", , "kieranrcampbell@gmail.com", role = c("aut", "cre"))
+Title: Laplacian eigenmaps & principal curves for pseudotemporal ordering of single-cell RNA-seq data
+Version: 0.1
+Authors@R: person("Kieran", "Campbell", , "kieran.campbell@sjc.ox.ac.uk", role = c("aut", "cre"))
 Description: TBC
 Depends: R (>= 3.1.1)
-License: What license is it under?
+License: GPL-3
 LazyData: true
 Imports:
   ggplot2,
