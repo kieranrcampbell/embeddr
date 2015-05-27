@@ -119,9 +119,10 @@ sce_tmp <- sce
 phenoData(sce_tmp)$State <- plyr::mapvalues(pData(sce_tmp)$State, from=1:3,
                                             to=c('Differentiating myoblast',
                                                  'Proliferating cell',
-                                                 'Contaminating cell'))
+                                                 'Interstitial mesenchymal cell'))
 
 plot_embedding(sce_tmp, color_by = 'State')
+
 ```
 
 We can view the graph of cells to see how connections between different parts form:
@@ -140,7 +141,7 @@ phenoData(sce_tmp)$cluster <- plyr::mapvalues(pData(sce_tmp)$cluster, from=c(3, 
 phenoData(sce_tmp)$cluster <- plyr::mapvalues(pData(sce_tmp)$cluster, from=1:3,
                                             to=c('Differentiating myoblast',
                                                  'Proliferating cell',
-                                                 'Contaminating cell'))
+                                                 'Interstitial mesenchymal cell'))
 
 plot_embedding(sce_tmp)
 ```
@@ -275,8 +276,8 @@ y$gene <- mapvalues(y$gene, from = cont_genes, to = short_names)
 ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), y=counts)) + 
   facet_wrap(~gene) + 
   geom_boxplot(outlier.shape=NA) + geom_jitter(alpha=0.5) +  theme_bw() + xlab('') +
-  theme(axis.text.x = element_text(angle = -90, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE) +
-  ylab('log10(FPKM + 1) counts') + ggtitle('Expression of contamination markers') 
+  theme(axis.text.x = element_text(angle = -50, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE) +
+  ylab('log10(FPKM + 1) counts') + ggtitle('Expression of mesenchymal markers') 
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
@@ -288,12 +289,14 @@ y <- exprs(sce[cont_genes,])
 y <- t(y)
 y <- data.frame(y)
 M_y <- cbind(dplyr::select(pData(sce), component_1, component_2, cluster), y)
-M_y_melted <- melt(M_y, id.vars=c('component_1','component_2','cluster'), 
+M_y <- dplyr::rename(M_y, Cluster = cluster)
+M_y_melted <- melt(M_y, id.vars=c('component_1','component_2','Cluster'), 
                    variable.name='gene', value.name='count')
 M_y_melted$gene <- mapvalues(M_y_melted$gene, from = cont_genes, to = short_names)
-ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(cluster))) + 
+ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(Cluster))) + 
   geom_point(alpha=0.6) + facet_wrap(~ gene) + theme_bw() +
-  scale_color_fivethirtyeight(name='cluster') + scale_size_continuous(name='log10(count)') 
+  scale_color_fivethirtyeight(name='Cluster') + scale_size_continuous(name='log10(FPKM)')  +
+  xlab('Component 1') + ylab('Component 2')
 ```
 
 Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:

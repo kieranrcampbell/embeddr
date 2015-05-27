@@ -307,6 +307,7 @@ plot_embedding <- function(sce, color_by = 'cluster') {
     plt <- plt + geom_path(aes(x = trajectory_1, y = trajectory_2), data=M, color='black',
                            size = 1, alpha = 0.7, linetype=2)
   }
+  plt <- plt + xlab('Component 1') + ylab('Component 2') 
   return( plt )
 }
 
