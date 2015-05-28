@@ -1,15 +1,64 @@
 #
 # R functions for Laplacian Eigenmaps
-# See e.g.
-#   'A Tutorial on Spectral Clustering', von Luxburg Statistics and Computing, 17 (4), 2007.
+# High resolution pseudotemporal of single-cell RNA-seq data using
+# laplacian eigenmaps and principal curves.
 #
 # kieran.campbell@sjc.ox.ac.uk
 #
-#
+# (c) 2015
+
+#' Laplacian eigenmaps embedding of single-cell RNA-seq data.
+#'
+#' @param sce The SCESet object
+#' @param genes_for_embedding A vector of gene indices or names to subset the sce for the embedding. The returned
+#' object contains the full original gene set found in sce.
+#' @param kernel The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
+#' 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
+#' Belkin & Niyogi
+#' @param nn Number of nearest neighbours if kernel == 'nn'
+#' @param eps Maximum distance parameter if kernel == 'dist'
+#' @param t 'time' for heat kernel if kernel == 'heat'
+#' @param symmetrize How to make the adjacency matrix symmetric. Note that slightly
+#' counterintuitively, node i having node j as a nearest neighbour doesn't guarantee node
+#' j has node i. There are several ways to get round this:
+#' \itemize{
+#' \item \code{mean} If the above case occurs make the link weight 0.5 so the adjacency matrix becomes \eqn{0.5(A + A')}
+#' \item \code{ceil} If the above case occurs set the link weight to 1 (ie take the ceiling of the mean case)
+#' \item \code{floor} If the above case occurs set the link weight to 0 (ie take the floor of the mean case)
+#' }
+#' @param measure_type Type of laplacian eigenmap, which corresponds to the constraint on the eigenvalue problem. If
+#' type is 'unorm' (default), then the graph measure used is the identity matrix, while if type is 'norm' then the measure
+#' used is the degree matrix. 
+#' @param p Dimension of the embedded space, default is 2
+#'
+#' @export
+#' @return An object of class SCESet
+embeddr <- function(sce, genes_for_embedding = NULL,
+                    kernel=c('nn','dist','heat'),
+                    metric=c('correlation', 'euclidean'),
+                    nn = round(log(ncol(sce))), eps = NULL, t = NULL,
+                    symmetrize = c('mean','ceil','floor'), 
+                    measure_type = c('unorm','norm'), p = 2) {
+  
+  if(is.null(genes_for_embedding)) genes_for_embedding <- 1:dim(sce)[1]
+  W <- weighted_graph(exprs(sce[genes_for_embedding,]), kernel = kernel, metric = metric,
+                      nn = nn, eps = eps, t = t, symmetrize = symmetrize)
+  
+  cellDist(sce) <- W
+  
+  M <- laplacian_eigenmap(W, measure_type = measure_type, p = p)
+  
+  ## 
+  pd <- pData(sce)
+  components_existing <- grep('component', names(pd))
+  if(length(components_existing > 0)) pd <- pd[,-components_existing]
+  phenoData(sce) <- new('AnnotatedDataFrame', data=cbind(pd, M))
+  return( sce )
+}
 
 #' Construct a weighted graph adjacency matrix
 #'
-#' @param sce The SCESet object
+#' @param x The feature-by-sample (e.g. genes are rows, cells are columns) data matrix
 #' @param kernel The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
 #' 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
 #' Belkin & Niyogi
@@ -27,7 +76,7 @@
 #'
 #' @export
 #' @return An n by n adjacency matrix
-weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
+weighted_graph <- function(x, kernel = c('nn','dist','heat'),
                            metric=c('correlation', 'euclidean'),
                            nn = round(log(ncol(sce))), eps = NULL, t = NULL,
                            symmetrize = c('mean','ceil','floor')) {
@@ -36,7 +85,6 @@ weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
   symmetrize <- match.arg(symmetrize)
   metric <- match.arg(metric)
 
-  x <- exprs(sce)
   ## compute distance matrix
   dm <- NULL
   if(metric == 'euclidean') {
@@ -88,16 +136,15 @@ weighted_graph <- function(sce, kernel=c('nn','dist','heat'),
 #' Laplacian eigenmaps
 #'
 #' Construct a laplacian eigenmap embedding
-#' @param sce The SCESet object
-#' @param W Weight matrix
-#' @param type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
+#' @param W The weighted graph adjacency matrix
+#' @param measure_type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
 #' @param p Dimension of the embedded space, default is 2
 #' 
 #' @export
 #'
 #' @return The p-dimensional embedding
-laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
-  type <- match.arg(type)
+laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2) {
+  measure_type <- match.arg(measure_type)
   if(nrow(W) != ncol(W)) {
     print('Input weight matrix W must be symmetric')
     return( NULL )
@@ -108,13 +155,13 @@ laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
   M <- NULL # object to be returned
   eig <- NULL # eigenvectors/values
 
-  if(type == 'norm') {
+  if(measure_type == 'norm') {
     Ds <- diag(1/sqrt(rowSums(W)))
     L_sym <- Ds %*% L %*% Ds
     eig <- eigen(L_sym, symmetric=T) # values ordered in decreasing order
     M <- diag(Ds) * eig$vectors[,(l-1):(l-p)]
   }
-  if(type == 'unorm') {
+  if(measure_type == 'unorm') {
     L  <- diag(rowSums(W)) - W
     eig <- eigen(L, symmetric=T) # values ordered in decreasing order
     l <- nrow(L)
@@ -126,11 +173,7 @@ laplacian_eigenmap <- function(sce, W, type=c('unorm','norm'), p=2) {
   colnames(M) <- paste0('component_', 1:p)
   M <- data.frame(M)
   
-  components_existing <- grep('component', names(pData(sce)))
-  pd <- pData(sce)
-  if(length(components_existing > 0)) pd <- pd[,-components_existing]
-  phenoData(sce) <- new('AnnotatedDataFrame', data=cbind(pd, M))
-  return( sce )
+  return( M )
 }
 
 #' Plot the degree distribution of the weight matrix
@@ -381,9 +424,10 @@ plot_heatmap <- function(sce, ...) {
 #' @export
 #' 
 #' @return A ggplot graphic
-plot_graph <- function(sce, W) {
+plot_graph <- function(sce) {
   df <- dplyr::select(pData(sce), x = component_1, y = component_2)
-
+  W <- cellDist(sce)
+  
   diag(W) <- 0
   locs <- which((1 * lower.tri(W) * W) > 0, arr.ind = TRUE)
   from_to <- apply(locs, 1, function(xy) {

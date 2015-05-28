@@ -20,3 +20,5 @@ Imports:
   lmtest,
   magrittr,
   splines
+Suggests:
+  NMF
