@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Embeddr by kieranrcampbell</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Embeddr</h1>
+        <p>Pseudotemporal ordering of single-cell RNA-seq data using laplacian eigenmaps &amp; principal curves</p>
+
+        <p class="view"><a href="https://github.com/kieranrcampbell/embeddr">View the Project on GitHub <small>kieranrcampbell/embeddr</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/kieranrcampbell/embeddr/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/kieranrcampbell/embeddr/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/kieranrcampbell/embeddr">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <p><code>Embeddr</code> can informatically order cells asynchronously going through a biological process (e.g. apoptosis or differentiation). It creates a reduced dimensional representation of the gene space using a high-variance gene correlation graph and laplacian eigenmaps. It then fits a smooth pseudotime trajectory using principal curves.</p>
+
+<h3>
+<a id="quick-start" class="anchor" href="#quick-start" aria-hidden="true"><span class="octicon octicon-link"></span></a>Quick start</h3>
+
+<h4>
+<a id="install-embeddr" class="anchor" href="#install-embeddr" aria-hidden="true"><span class="octicon octicon-link"></span></a>Install embeddr</h4>
+
+<p>First install embeddr and <a href="https://github.com/davismcc/scater">scater</a>:</p>
+
+<div class="highlight highlight-r"><pre>library(<span class="pl-smi">devtools</span>)
+install_github(<span class="pl-s"><span class="pl-pds">'</span>davismcc/scater<span class="pl-pds">'</span></span>)
+install_github(<span class="pl-s"><span class="pl-pds">'</span>kieranrcampbell/embeddr<span class="pl-pds">'</span></span>)</pre></div>
+
+<h4>
+<a id="convert-data-to-an-sceset" class="anchor" href="#convert-data-to-an-sceset" aria-hidden="true"><span class="octicon octicon-link"></span></a>Convert data to an SCESet</h4>
+
+<p>If you have a gene-by-cell data.frame <code>X</code> of single-cell RNA-seq measurements and a cell-by-feature data.frame <code>PD</code> of cell descriptors
+then you can create an <code>SCESet</code> via</p>
+
+<div class="highlight highlight-r"><pre><span class="pl-smi">pd</span> <span class="pl-k">&lt;-</span> new(<span class="pl-s"><span class="pl-pds">'</span>AnnotatedDataFrame<span class="pl-pds">'</span></span>, <span class="pl-v">data</span><span class="pl-k">=</span><span class="pl-smi">PD</span>)
+<span class="pl-smi">sce</span> <span class="pl-k">&lt;-</span> newSCESet(<span class="pl-v">cellData</span> <span class="pl-k">=</span> <span class="pl-smi">X</span>, <span class="pl-v">phenoData</span> <span class="pl-k">=</span> <span class="pl-smi">pd</span>)</pre></div>
+
+<h4>
+<a id="use-embeddr" class="anchor" href="#use-embeddr" aria-hidden="true"><span class="octicon octicon-link"></span></a>Use embeddr</h4>
+
+<div class="highlight highlight-r"><pre>library(<span class="pl-smi">embeddr</span>)
+
+<span class="pl-c">## Create a cell-cell correlation graph and use it for the reduced embedding:</span>
+<span class="pl-smi">sce</span> <span class="pl-k">&lt;-</span> embeddr(<span class="pl-smi">sce</span>)
+
+<span class="pl-c">## Plot a reduced-dimension embedding</span>
+plot_embedding(<span class="pl-smi">sce</span>)
+
+<span class="pl-c">## Optionally cluster the embedding. Cluster assignments are stored in pData(sce)$cluster.</span>
+<span class="pl-c">## If no number of clusters is designated, the number is chosen using the BIC from package mclust</span>
+<span class="pl-smi">sce</span> <span class="pl-k">&lt;-</span> cluster_embedding(<span class="pl-smi">sce</span>)
+
+<span class="pl-c">## Fit pseudotime using principal curves</span>
+<span class="pl-smi">sce</span> <span class="pl-k">&lt;-</span> fit_pseudotime(<span class="pl-smi">sce</span>)
+
+<span class="pl-c">## Plot genes 1:10 in pseudotime:</span>
+plot_in_pseudotime(<span class="pl-smi">sce</span>[<span class="pl-c1">1</span><span class="pl-k">:</span><span class="pl-c1">10</span>,])
+
+<span class="pl-c">## Fit differential expression pseudotime model. This will report gene name, p-val and q-val</span>
+<span class="pl-smi">diff_gene_test</span> <span class="pl-k">&lt;-</span> pseudotime_test(<span class="pl-smi">sce</span>)
+</pre></div>
+
+<h4>
+<a id="further-examples" class="anchor" href="#further-examples" aria-hidden="true"><span class="octicon octicon-link"></span></a>Further examples</h4>
+
+<p>Fully worked examples using the Monocle dataset and the distal lung epithelium dataset (Quake et al.) can be found in the <a href="https://github.com/kieranrcampbell/embeddr/tree/master/vignettes">vignettes/</a> directory.</p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/kieranrcampbell">kieranrcampbell</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
