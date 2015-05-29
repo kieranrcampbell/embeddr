@@ -57,7 +57,7 @@ plot_embedding(sce)
 
 The function `embeddr::plot_embedding` can be used at any time on the appropriate `data.frame` objects and will display all relevant information. We can start by seeing where the different inferred states from the monocle dataset fall on our embedding:
 
-```{r monocle-state, fig.align='center', cache=TRUE}
+```{r monocle-state,  cache=TRUE}
 HSMM <- setOrderingFilter(HSMM, marker_genes)
 HSMM <- reduceDimension(HSMM, use_irlba = F)
 HSMM <- orderCells(HSMM, num_paths=2, reverse=F)
@@ -67,7 +67,7 @@ plot_embedding(sce, color_by = 'monocle_state')
 
 So there appears to be reasonable correspondance between the monocle clusters and natural clusters in our data. The `embeddr::cluster_embedding` function applies k-means clustering to the dataset:
 
-```{r cluster-embedding, fig.align='center', cache=TRUE, message=FALSE}
+```{r cluster-embedding,  cache=TRUE, message=FALSE}
 set.seed(123)
 sce <- cluster_embedding(sce, k=3, method='mm')
 plot_embedding(sce)
@@ -75,11 +75,10 @@ plot_embedding(sce)
 
 ### Selecting genes for the embedding
 
-In standard manifold learning problems it is recommended that each feature is appropriately scaled to have mean 0 and variance 1. Since laplacian eigenmaps depend only on the distance between data points, scaling the features is equivalent to treating the variance in each gene equally no matter how large or small it was originally. As a result, the variance in genes that don't truly vary that much (such as housekeeping genes) is as important as the genes that really do vary with the biological process of interest, adding much noise to the process.
+In standard manifold learning problems it is recommended that each feature is appropriately scaled to have mean 0 and variance 1. However, this is equivalent to treating all genes as equally contributing towards the process. Therefore it is recommended not to scale the dataset.
 
-There are several ways to get round this problem. We can choose genes we a priori know vary with the biological process as we have done above (where the genes chosen are those associated with muscle development). An alternative is to choose genes whose coefficient of variation (CV2) is above some threshold or in a particular percentile:
-
-```{r cv2, cache=TRUE, fig.align='center'}
+The entire transcriptome can be used to construct the embedding. However, it can be useful to pick only high-variance genes removing some of the residual noise from housekeeping or lowly expressed ones. The justification behind this is that the main source of variation in our dataset will be attributed to the process of interest. These high variance genes can be found using spike-ins (see Brennecke et al. Nature Methods 2014) or simlpy by fitting CV-mean curves and finding genes with a CV much higher than the mean:
+```{r cv2, cache=TRUE, }
 x <- t(log10(exprs(HSMM) + 1))
 x_mean <- colMeans(x)
 x_var <- apply(x, 2, var)
@@ -96,9 +95,9 @@ ggplot(df_fit, aes(x=m, y=CV2, color = for_embedding)) + geom_point() +
   stat_function(fun=f, color='black')
 ```
 
-Once we have picked the genes we want to use for the embedding, we scale them to treat them as equal to avoid high magnitude outliers driving the embedding:
+Next we take the log10 of the dataset (using a pseudocount of 1) and fit the embedding using the `embeddr` function using the default settings:
 
-```{r embedding_highmag, cache=TRUE, fig.align='center', fig.width=7.5, fig.height=4.5}
+```{r embedding_highmag, cache=TRUE,  fig.width=7.5, fig.height=4.5}
 set.seed(123)
 sce <- fromCellDataSet(HSMM)
 sce@lowerDetectionLimit <- log10(0.1 + 1) ## monocle lower detection limit is 0.1
@@ -119,12 +118,12 @@ plot_embedding(sce_tmp, color_by = 'State')
 
 We can view the graph of cells to see how connections between different parts form:
 
-```{r nn, cache=TRUE, fig.align='center', fig.width=6.5, fig.height=4.5}
+```{r nn, cache=TRUE,  fig.width=6.5, fig.height=4.5}
 plot_graph(sce)
 ```
 
 We can also cluster the embedding using kmeans and plot:
-```{r clust_emb, cache=TRUE, fig.align='center', fig.width=7.5, fig.height=4.5}
+```{r clust_emb, cache=TRUE,  fig.width=7.5, fig.height=4.5}
 sce <- cluster_embedding(sce, 3)
 
 sce_tmp <- sce
@@ -140,7 +139,7 @@ plot_embedding(sce_tmp)
 
 Finally, we want to check the method is different to a more primitive technique such as PCA alone:
 
-```{r pca, cache=TRUE, fig.align='center', fig.width=6, fig.height=4.5}
+```{r pca, cache=TRUE,  fig.width=6, fig.height=4.5}
 pca <- princomp(t(exprs(sce[gene_indices,])))
 df_pca <- data.frame(x1 = pca$scores[,1], x2 = pca$scores[,2], monocle_state = pData(sce)$State)
 ggplot(df_pca, aes(x=x2, y=x1, color=monocle_state)) + geom_point() + 
@@ -150,7 +149,7 @@ ggplot(df_pca, aes(x=x2, y=x1, color=monocle_state)) + geom_point() +
 ### Pseudotime fitting
 In the `monocle` paper they show that groups 1 & 3 correspond to differentiating cells while group 2 is contamination. We can separate off groups 1 & 3, fit the pseudotime trajectories and plot:
 
-```{r fit-pseudotime, fig.align='center', cache=TRUE}
+```{r fit-pseudotime,  cache=TRUE}
 sce_23 <- sce[, pData(sce)$cluster %in% c(1,3)]
 sce_23 <- fit_pseudotime(sce_23)
 #save(sce_23, file='/net/isi-scratch/kieran/embeddr/embeddr/data/sce_23.Rdata')
@@ -159,7 +158,7 @@ plot_embedding(sce_23)
 
 We can also compare our pseudotime with that of `monocle`:
 
-```{r comp-mon, cache=TRUE, fig.align='center', fig.width=4, fig.height=4}
+```{r comp-mon, cache=TRUE,  fig.width=4, fig.height=4}
 in_state23 <- pData(sce_23)$cell_id
 monocle_df <- filter(pData(HSMM), cell_id %in% in_state23)
 
@@ -169,7 +168,7 @@ qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$p
 
 So there is good correspondence between the `monocle` and `embeddr` pseudotimes, though it appears that the `embeddr` version goes in the wrong direction. Pseudotimes are equivalent up to parity and scaling transformations (which is perhaps more philosophical than it sounds), so we can use the `embeddr::reverse_pseudotime` function to make the pseudotimes 'run' in the same direction:
 
-```{r reverse-pseudotime, fig.align='center', fig.width=4, fig.height=4, cache=TRUE}
+```{r reverse-pseudotime,  fig.width=4, fig.height=4, cache=TRUE}
 sce_23 <- reverse_pseudotime(sce_23)
 qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$pseudotime) +
   theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
@@ -183,7 +182,7 @@ The overall correlation between the two pseudotime trajectories is `r format(rou
 
 To plot the genes in pseudotime we need to provide the original gene values for the cells in clusters 1 & 3:
 
-```{r plot-prep, cache=TRUE, fig.align='center', fig.width=5, fig.height=5}
+```{r plot-prep, cache=TRUE,  fig.width=5, fig.height=5}
 #xp <- select(data.frame(t(x)), one_of(Mp$cell_id))
 genes_to_plot <- row.names(subset(fData(HSMM), 
                                   gene_short_name %in% c("CDK1", "MEF2C", "MYH3", "MYOG","ID1")))
@@ -194,13 +193,13 @@ which is largely similar to the monocle equivalent.
 
 We can also plot a heatmap of all the genes in pseudotime:
 
-```{r heatmap, fig.align='center', fig.width=8.5,fig.height=6, message=FALSE, cache=TRUE}
+```{r heatmap,  fig.width=8.5,fig.height=6, message=FALSE, cache=TRUE}
 plot_heatmap(sce_23[gene_indices,])
 ```
 
 Let's have a look at the MRF family of transcription factors:
 
-```{r mrf, fig.align='center', cache=TRUE}
+```{r mrf,  cache=TRUE}
 mrf <- c('MYOD1', 'MYF5', 'MYF6', 'MYOG') 
 mrf_ind <- sapply(mrf, match, fData(sce_23)$gene_short_name)
 
@@ -213,7 +212,7 @@ plot_pseudotime_model(sce_23[mrf_ind,])
 
 We can also show that the overall shape of the embedding is robust to a varying choice of nearest neighbours:
 
-```{r neighbour-choice, fig.align='center', fig.width=8, fig.height=6, cache=TRUE}
+```{r neighbour-choice,  fig.width=8, fig.height=6, cache=TRUE}
 
 nns <- c(5,6,8,10,15,20)
 embeddings <- ldply(nns, function(i) {
@@ -232,7 +231,7 @@ ggplot(data=embeddings, aes(x=component_1, y=component_2, color=monocle_state)) 
 
 In the original monocle dataset, only a small number of cells were assigned to group 3 ('interstitial mesenchymal cell'). However, our re-analysis suggests it is somewhat a larger with `r sum(pData(sce)$cluster == 2)` cells in total. These cells were identified as mesenchymal cells as they expressed PDGFRA and SPHK1 in high abundances. We can look to see whether in our cell set we've identified more cells that are potentially contamination:
 
-```{r cont1, fig.align='center', cache=TRUE, results='asis'}
+```{r cont1,  cache=TRUE, results='asis'}
 phenoData(sce)$monocle_classification <- mapvalues(pData(sce)$State, from=1:3, c('non-cont','non-cont','cont'))
 phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','cont','non-cont'))
 
@@ -242,7 +241,7 @@ print(kable(as.data.frame(table(dplyr::select(pData(sce), monocle_classification
 So `embeddr` calls significatnly more cells as contaminated, while calls none as non-contaminated that `monocle` calls contaminated.
 
 What we'd like to do is see how the gene markers compare when considering the contamined cells identified by monocle, the contaminated cells we identify, and all other cells:
-```{r cont2, fig.align='center', cache=TRUE, message=FALSE, warning=FALSE, fig.height=4.5, fig.width=6}
+```{r cont2,  cache=TRUE, message=FALSE, warning=FALSE, fig.height=4.5, fig.width=6}
 agree_contamination <- apply(dplyr::select(pData(sce), monocle_classification, embeddr_classification), 
                              1, function(x) {
   if(x['monocle_classification'] == 'cont' & x['embeddr_classification'] == 'cont') {
@@ -273,7 +272,7 @@ ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), 
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
-```{r markers-in-space, cache=T, fig.width=9, fig.height=8, fig.align='center'}
+```{r markers-in-space, cache=T, fig.width=9, fig.height=8}
 cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("CDK1", "MYOG", "PDGFRA", 
                                                                     "SPHK1", "MYF5", "NCAM1")))
 short_names <- fData(HSMM)[cont_genes,]$gene_short_name
@@ -293,7 +292,7 @@ ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(Cl
 
 Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:
 
-```{r co-expression, fig.align='center', cache=TRUE}
+```{r co-expression,  cache=TRUE}
 cdk1_ind <- match('CDK1', fData(HSMM)$gene_short_name)
 pdgfra_ind <- match('PDGFRA', fData(HSMM)$gene_short_name)
 is_contaminated <- pData(sce)$cluster == 2
@@ -309,7 +308,7 @@ ggplot(data=cx) + geom_point(aes(x=CDK1, y=PDGFRA)) +
 
 Subsample to check robustness:
 
-```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8, fig.align='center'}
+```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8}
 ncv <- 8
 inds <- createFolds(1:ncol(sce), ncv)
 
@@ -327,7 +326,7 @@ ggplot(embeddings) + geom_point(aes(x=component_1, y=component_2, color=cluster)
 ```
 
 Try the same with 1/3 of the data:
-```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=3, fig.align='center'}
+```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=3 }
 ncv <- 3
 
 inds_3 <- createFolds(1:ncol(sce), k=ncv)
@@ -346,7 +345,7 @@ ggplot(embeddings_3) + geom_point(aes(x=component_1, y=component_2, color=cluste
 ```
 And see that the pseudotime fits are roughly constant:
 
-```{r fit-cv-pst, cache=TRUE, fig.align='center', warning=FALSE, message=FALSE}
+```{r fit-cv-pst, cache=TRUE,  warning=FALSE, message=FALSE}
 save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
 set.seed(45)
 folds <- createMultiFolds(1:ncol(sce), k = 5, times = 30)
@@ -380,7 +379,7 @@ qplot(corrs) + theme_minimal() +
 
 Model a single gene in pseudotime:
 
-```{r model_pseudotime, cache=TRUE, fig.align='center', message=FALSE}
+```{r model_pseudotime, cache=TRUE,  message=FALSE}
 cdk1 <- row.names(subset(fData(HSMM),  gene_short_name == 'CDK1'))
 sce_23@lowerDetectionLimit <- log10(1 + 0.1)
 model <- fit_pseudotime_model(sce_23, cdk1)
@@ -404,7 +403,7 @@ diff_gene_test <- pseudotime_test(sce_23_kept, n_cores = 1)
 
 And plot p-vals:
 
-```{r plot-p, cache=TRUE, fig.align='center', warning=FALSE}
+```{r plot-p, cache=TRUE,  warning=FALSE}
 qplot(diff_gene_test$p_val, binwidth = 0.01) + theme_bw() + xlab('p-value') 
 qplot(diff_gene_test$q_val, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
 
@@ -424,7 +423,7 @@ pe <- predicted_expression(sce_sig)
 ```
 
 And we can plot the correlation plot:
-```{r correlation-plot,  fig.width=9, fig.height=5, fig.align='center', cache=TRUE}
+```{r correlation-plot,  fig.width=9, fig.height=5,  cache=TRUE}
 pcor <- cor(pe)
 dist_cor <- 1 - pcor / 2 
 hc <- hclust(as.dist(dist_cor))
