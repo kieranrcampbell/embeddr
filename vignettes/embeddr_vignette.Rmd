@@ -150,6 +150,7 @@ ggplot(df_pca, aes(x=x2, y=x1, color=monocle_state)) + geom_point() +
 In the `monocle` paper they show that groups 1 & 3 correspond to differentiating cells while group 2 is contamination. We can separate off groups 1 & 3, fit the pseudotime trajectories and plot:
 
 ```{r fit-pseudotime,  cache=TRUE}
+save(sce, file='~/delete_me.Rdata')
 sce_23 <- sce[, pData(sce)$cluster %in% c(1,3)]
 sce_23 <- fit_pseudotime(sce_23)
 #save(sce_23, file='/net/isi-scratch/kieran/embeddr/embeddr/data/sce_23.Rdata')
@@ -208,26 +209,119 @@ plot_in_pseudotime(sce_23[mrf_ind,])
 plot_pseudotime_model(sce_23[mrf_ind,])
 ```
 
-### Robustness to choice of nearest neighbours
+## Robustness of the embedding
 
-We can also show that the overall shape of the embedding is robust to a varying choice of nearest neighbours:
+### Choice of nearest neighbours
 
-```{r neighbour-choice,  fig.width=8, fig.height=6, cache=TRUE}
+
+```{r neighbour-choice,  fig.width=8, fig.height=6, cache=TRUE, warning=FALSE}
 
 nns <- c(5,6,8,10,15,20)
+sce_npst <- sce
+sce_npst$pseudotime <- NULL
 embeddings <- ldply(nns, function(i) {
-  sce_map <- embeddr(sce, genes_for_embedding = gene_indices, nn = i)
-  return(dplyr::select(pData(sce_map), component_1, component_2))
+  sce_map <- embeddr(sce_npst, genes_for_embedding = gene_indices, nn = i)
+  sce_map <- fit_pseudotime(sce_map, clusters=c(1,3))
+  return(dplyr::select(pData(sce_map), component_1, component_2, trajectory_1, trajectory_2, pseudotime))
 })
-embeddings$nn <- rep(nns, each = dim(sce)[2])
-embeddings$monocle_state  <- rep(pData(sce)$State, times = length(nns))
 
-ggplot(data=embeddings, aes(x=component_1, y=component_2, color=monocle_state)) + geom_point() +
+embeddings$nn <- rep(nns, each = dim(sce)[2])
+embeddings$cluster  <- as.factor(rep(pData(sce)$cluster, times = length(nns)))
+
+embeddings <- dplyr::arrange(embeddings, nn, pseudotime)
+
+ggplot(data=embeddings) + geom_point(aes(x=component_1, y=component_2, color=cluster), alpha=0.75) +
   theme_bw() + facet_wrap(~ nn) +
-  ggtitle('Overall shape for variety of nearest neighbours')
+  ggtitle('Overall shape for variety of nearest neighbours') + xlab('Component 1') +
+  ylab('Component 2') +
+  geom_path(aes(x=trajectory_1, y=trajectory_2), size = 1, linetype=2)
 ```
 
-### Unravelling the contaminated cells
+### Subsampling the number of cells
+
+Subsample to check robustness:
+
+```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8, warning=FALSE}
+ncv <- 8
+inds <- createFolds(1:ncol(sce), ncv)
+
+embeddings <- ldply(1:ncv, function(i) {
+  sce_reduced <- sce[gene_indices ,-inds[[i]] ]
+  sce_reduced <- embeddr(sce_reduced)
+  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,3))
+  M_tmp <- dplyr::select(pData(sce_reduced), component_1, component_2, cluster, 
+                         trajectory_1, trajectory_2, pseudotime)
+  M_tmp$fold <- i
+  M_tmp
+  })
+
+embeddings$cluster <- as.factor(embeddings$cluster)
+embeddings <- dplyr::arrange(embeddings, fold, pseudotime)
+ggplot(embeddings) + geom_point(aes(x=component_1, y=component_2, color=cluster), alpha=0.75) + 
+ facet_wrap(~ fold) + theme_bw() +
+  ggtitle('Embedding for removing 1/8th of cells') + xlab('Component 1') +
+  ylab('Component 2') +
+  geom_path(aes(x=trajectory_1, y=trajectory_2), size = 1, linetype=2)
+```
+
+Try the same with 1/2 of the data:
+```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=7, warning=FALSE}
+inds_2 <- createMultiFolds(1:ncol(sce), k=2, times=6)
+
+embeddings_2 <- ldply(1:length(inds_2), function(i) {
+  sce_reduced <- sce[gene_indices ,-inds_2[[i]] ]
+  sce_reduced <- embeddr(sce_reduced, nn = 5)
+  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,3))
+  M_tmp <- dplyr::select(pData(sce_reduced), component_1, component_2, cluster,
+                         trajectory_1, trajectory_2, pseudotime)
+  M_tmp$fold <- i
+  M_tmp
+})
+
+embeddings_2$cluster <- as.factor(embeddings_2$cluster)
+embeddings_2 <- dplyr::arrange(embeddings_2, fold, pseudotime)
+ggplot(embeddings_2) + geom_point(aes(x=component_1, y=component_2, color=cluster), alpha=0.75) + 
+ facet_wrap(~ fold) + theme_bw() +
+  ggtitle('Embedding for subsampling 50% of cells') + xlab('Component 1') +
+  ylab('Component 2') +
+  geom_path(aes(x=trajectory_1, y=trajectory_2), size = 1, linetype=2)
+```
+And see that the pseudotime fits are roughly constant:
+
+```{r fit-cv-pst, cache=TRUE,  warning=FALSE, message=FALSE}
+save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
+set.seed(45)
+folds <- createMultiFolds(1:ncol(sce), k = 2, times = 30)
+all_embeddings <- lapply(folds, function(ind) {
+    #sce_tmp <- sce[gene_indices, ind]
+    sce_tmp <- embeddr(sce[gene_indices,ind])#, genes_for_embedding = gene_indices)
+    sce_tmp
+  })
+
+#all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
+
+psts <- lapply(all_embeddings, function(sce_tmp) {
+  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,3)]
+  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,3))
+  sce_tmp_13$pseudotime
+})
+
+ corrs <- sapply(1:length(all_embeddings), function(i) {
+  sce_i <- all_embeddings[[i]]
+  cells_in_i <- pData(sce_i)$cell_id
+  sce_23_red <- sce_23[, pData(sce_23)$cell_id %in% cells_in_i]
+  abs(cor(psts[[i]], sce_23_red$pseudotime))
+})
+qplot(corrs) + theme_minimal() +
+  ggtitle('Correlation between sampled pseudotimes') +
+  xlab('Correlation')
+
+print(paste('Median: ', median(corrs)))
+print(paste('SD: ', sd(corrs)))
+```
+
+
+## Unravelling the contaminated cells
 
 In the original monocle dataset, only a small number of cells were assigned to group 3 ('interstitial mesenchymal cell'). However, our re-analysis suggests it is somewhat a larger with `r sum(pData(sce)$cluster == 2)` cells in total. These cells were identified as mesenchymal cells as they expressed PDGFRA and SPHK1 in high abundances. We can look to see whether in our cell set we've identified more cells that are potentially contamination:
 
@@ -306,73 +400,6 @@ ggplot(data=cx) + geom_point(aes(x=CDK1, y=PDGFRA)) +
   ggtitle('Coexpression of PDGFRA and CDK1 in contaminated cells')
 ```
 
-Subsample to check robustness:
-
-```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8}
-ncv <- 8
-inds <- createFolds(1:ncol(sce), ncv)
-
-embeddings <- ldply(1:ncv, function(i) {
-  sce_reduced <- sce[gene_indices ,-inds[[i]] ]
-  sce_reduced <- embeddr(sce_reduced)
-  M_tmp <- dplyr::select(pData(sce_reduced), component_1, component_2, cluster)
-  M_tmp$fold <- i
-  M_tmp
-  })
-
-embeddings$cluster <- as.factor(embeddings$cluster)
-ggplot(embeddings) + geom_point(aes(x=component_1, y=component_2, color=cluster)) + 
- facet_wrap(~ fold) + theme_bw()
-```
-
-Try the same with 1/3 of the data:
-```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=3 }
-ncv <- 3
-
-inds_3 <- createFolds(1:ncol(sce), k=ncv)
-
-embeddings_3 <- ldply(1:ncv, function(i) {
-  sce_reduced <- sce[gene_indices ,-inds_3[[i]] ]
-  sce_reduced <- embeddr(sce_reduced, nn = 5)
-  M_tmp <- dplyr::select(pData(sce_reduced), component_1, component_2, cluster)
-  M_tmp$fold <- i
-  M_tmp
-})
-
-embeddings_3$cluster <- as.factor(embeddings_3$cluster)
-ggplot(embeddings_3) + geom_point(aes(x=component_1, y=component_2, color=cluster)) + 
- facet_wrap(~ fold) + theme_bw()
-```
-And see that the pseudotime fits are roughly constant:
-
-```{r fit-cv-pst, cache=TRUE,  warning=FALSE, message=FALSE}
-save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
-set.seed(45)
-folds <- createMultiFolds(1:ncol(sce), k = 5, times = 30)
-all_embeddings <- lapply(folds, function(ind) {
-    #sce_tmp <- sce[gene_indices, ind]
-    sce_tmp <- embeddr(sce[gene_indices,ind])#, genes_for_embedding = gene_indices)
-    sce_tmp
-  })
-
-#all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
-
-psts <- lapply(all_embeddings, function(sce_tmp) {
-  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,3)]
-  sce_tmp_13 <- fit_pseudotime(sce_tmp_13 )
-  sce_tmp_13$pseudotime
-})
-
- corrs <- sapply(1:length(all_embeddings), function(i) {
-  sce_i <- all_embeddings[[i]]
-  cells_in_i <- pData(sce_i)$cell_id
-  sce_23_red <- sce_23[, pData(sce_23)$cell_id %in% cells_in_i]
-  abs(cor(psts[[i]], sce_23_red$pseudotime))
-})
-qplot(corrs) + theme_minimal() +
-  ggtitle('Correlation between sampled pseudotimes') +
-  xlab('Correlation')
-```
 
 
 ## Modelling genes in pseudotime
@@ -431,7 +458,7 @@ plot(hc, labels=FALSE)
 ```
 
 Now look at conserved modules:
-```{r plot-modules, fig.width=2.5, fig.height=8, cache=TRUE, message=FALSE}
+```{r plot-modules, fig.width=6, fig.height=4, cache=TRUE, message=FALSE}
 n_cuts <- 6
 gene_classes <- cutree(hc, n_cuts)
       
@@ -451,8 +478,8 @@ pe_melted <- inner_join(pe_melted, mean_expr_per_group)
 ## pe_melted <- arrange(pe_melted, gene, pseudotime)
 
 ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
-  facet_wrap(~ class, ncol = 1) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
-  theme_bw() + ylab('Expression')
+  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  theme_bw() + ylab('Expression') # add ncol = 1 for vertical representation
 
 ```
 
