@@ -27,7 +27,7 @@ library(scater) ## to hold single-cell data
 library(knitr) ## for kable function
 library(goseq) ## for GO enrichment
 library(org.Hs.eg.db) ## for HG19 GO annotations
-load_all('.')
+library(embeddr)
 data(HSMM)
 
 ## add cell_id to HSMM to play nicely with dplyr
