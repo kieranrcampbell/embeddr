@@ -34,6 +34,7 @@
 #' @param p Dimension of the embedded space, default is 2
 #' 
 #' @import scater
+#' @importFrom Biobase exprs
 #'
 #' @export
 #' @return An object of class SCESet
@@ -214,6 +215,8 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' @export
 #' @import mclust
 #' @importFrom dplyr select
+#' @importFrom Biobase phenoData
+#' @importFrom Biobase phenoData<-
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
@@ -273,6 +276,7 @@ cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
 #' 
 #' @importFrom dplyr select
 #' @importFrom princurve principal.curve
+#' @import scater
 #' 
 #' @export
 #'
@@ -385,6 +389,7 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'  @export
 #'  @import ggplot2
 #'  @importFrom reshape2 melt
+#'  @importFrom Biobase fData
 #'
 #'  @return A \pkg{ggplot2} plot
 plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE) {
@@ -643,7 +648,8 @@ pseudotime_test <- function(sce, n_cores = 2) {
 #' for each. \strong{WARNING}: The list returned can be huge, so use only on a few genes. 
 #' 
 #' @param sce An object of class \code{SCESet}
-#' @param n_cores The number of cores to use in the call to \code{mcapply}
+#' @param n_cores The number of cores to use in the call to \code{mclapply}
+#' @importFrom parallel mclapply
 #' 
 #' @export
 fit_pseudotime_models <- function(sce, n_cores = 2) {
@@ -669,8 +675,9 @@ fit_pseudotime_models <- function(sce, n_cores = 2) {
 #' which a \code{predict} function is available, then a single vector corresponding to 
 #' \code{predict(model)} is returned. If NULL then the model is computed for all genes in
 #' \code{sce} and the resulting list returned.
-#' @param n_cores The number of cores to pass to \code{mcapply}.
+#' @param n_cores The number of cores to pass to \code{mclapply}.
 #' 
+#' @importFrom Biobase featureNames
 #' @export
 predicted_expression <- function(sce, models = NULL, n_cores = 2) {
   if(!is.null(models)) {  
@@ -745,6 +752,7 @@ plot_pseudotime_metrics <- function(sce, ...) {
 #' @param window_size The size of the sliding window. By default taken to be half the number of cells
 #' 
 #' @export
+#' @importFrom Biobase pData
 #' @return An object of class `data.frame` where each column is a metric (window-averaged pseudotime,
 #' mean, variance, CV2, signal to noise ratio)
 calculate_metrics <- function(sce, gene, window_size=NULL) {
