@@ -12,7 +12,7 @@ output:
   pdf_document: default
 ---
 
-Here we show how `embeddr` (= spectral embedding + principal curves) can be used for pseudotemporal ordering of single-cell gene expression data using the [monocle](http://cole-trapnell-lab.github.io/monocle-release/) dataset.
+Here we show how `embeddr` (= spectral embedding + principal curves) can be used for pseudotemporal ordering of single-cell gene expression data using the [monocle](http://cole-trapnell-lab.github.io/monocle-release/) dataset. This uses the `HSMMSingleCell` dataset that is bundled with monocle.
 
 ```{r load-all, message=FALSE, warning=FALSE}
 library(monocle) ## for monocle data
@@ -28,22 +28,35 @@ library(knitr) ## for kable function
 library(goseq) ## for GO enrichment
 library(org.Hs.eg.db) ## for HG19 GO annotations
 library(embeddr)
-data(HSMM)
+```
+
+
+First we create the `SCESet` using the data from the `HSMMSingleCell` package:
+```{r create-sce, message=FALSE, warning=FALSE, cache=TRUE}
+data(HSMM_expr_matrix)
+data(HSMM_gene_annotation)
+data(HSMM_sample_sheet)
+
+pd <- new('AnnotatedDataFrame', data = HSMM_sample_sheet)
+fd <- new('AnnotatedDataFrame', data = HSMM_gene_annotation)
+sce <- newSCESet(exprsData = HSMM_expr_matrix, phenoData = pd, featureData = fd)
 
 ## add cell_id to HSMM to play nicely with dplyr
-phenoData(HSMM)$cell_id <- rownames(pData(HSMM))
+phenoData(sce)$cell_id <- rownames(pData(sce))
 ```
 
 First we go through cleaning the monocle dataset and selecting for marker genes only:
 
 ```{r clean-monocle, cache=TRUE}
+## convert back to monocle
+HSMM <- toCellDataSet(sce)
 marker_genes <- row.names(subset(fData(HSMM),
                                  gene_short_name %in% c("MEF2C", "MEF2D", "MYF5", "ANPEP", "PDGFRA",
                   "MYOG", "TPM1", "TPM2", "MYH2", "MYH3", "NCAM1",
                   "CDK1", "CDK2", "CCNB1", "CCNB2", "CCND1", "CCNA")))
 x <- log(exprs(HSMM[marker_genes,]) + 1)
 x <- t(scale(t(x)))
-sce <- fromCellDataSet(HSMM[marker_genes,])
+sce <- sce[marker_genes,]
 exprs(sce) <- x
 ```
 
@@ -283,7 +296,7 @@ ggplot(embeddings_2) + geom_point(aes(x=component_1, y=component_2, color=cluste
 And see that the pseudotime fits are roughly constant:
 
 ```{r fit-cv-pst, cache=TRUE,  warning=FALSE, message=FALSE}
-save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
+##save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
 set.seed(45)
 folds <- createMultiFolds(1:ncol(sce), k = 2, times = 30)
 all_embeddings <- lapply(folds, function(ind) {

@@ -22,4 +22,6 @@ Imports:
   Biobase,
   parallel
 Suggests:
-  NMF
+  NMF,
+  monocle,
+  HSMMSingleCell
