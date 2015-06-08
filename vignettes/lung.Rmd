@@ -10,29 +10,31 @@ output:
     toc: yes
 ---
 
-Initial data processing: first we read in the data and remove bulk transcripts:
+In this vignette we apply `embeddr` to the [Quake et al.](http://www.nature.com/nature/journal/v509/n7500/full/nature13173.html) dataset. For copyright reasons we do not include the raw data in the package. It can be downloaded from [here](http://www.nature.com/nature/journal/v509/n7500/extref/nature13173-s4.txt) and converted to an `SCESet` using [the accompanying vignette](https://github.com/kieranrcampbell/embeddr/blob/master/vignettes/quake_to_scater.Rmd). 
+
+In this example we have saved it to `~/oxford/embeddr/data/lsce.Rdata`, though this should be changed to where you save it.
 
 ```{r load-lib, message=FALSE, warning=FALSE}
 library(dplyr)
 library(devtools)
 library(data.table)
 library(ggplot2)
+library(reshape2)
 library(splines)
-library(VGAM)
 library(corrplot)
 library(scater)
 library(gplots)
 library(NMF)
-
-embeddr_path <-  '~/oxford/embeddr/embeddr' ##"/net/isi-scratch/kieran/embeddr/embeddr" # 
-load_all(embeddr_path)
+library(monocle)
+library(embeddr)
 
 set.seed(123)
 ```
 
 ```{r load-data, cache=TRUE}
 ## load object 'lsce' 
-data(lsce)
+data_path <- '~/oxford/embeddr/data/lsce.Rdata'
+load(data_path)
 lsce@lowerDetectionLimit <- 0 # from paper
 ```
 
@@ -70,7 +72,7 @@ Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
 lsce <- embeddr(lsce, genes_for_embedding = het_indices, nn = 10)
 
 phenoData(lsce)$cluster <- pData(lsce)$putative_cell_type
-plot_embedding(lsce)
+plot_embedding(lsce, color_by = 'putative_cell_type')
 plot_graph(lsce)
 ```
 
@@ -78,7 +80,7 @@ It is obvious we have two very separate trajectories; let's consider the pseudot
 
 ```{r cluster-plot, cache=TRUE, fig.align='center', message=FALSE}
 set.seed(123)
-lsce <- cluster_embedding(lsce, method='kmeans', k = 4)
+lsce <- cluster_embedding(lsce, method='mm')#, k = 4)
 plot_embedding(lsce)
 
 cl1 <- pData(lsce)$cluster %in% 1:3
@@ -88,9 +90,10 @@ lsce_13 <- fit_pseudotime(lsce_13)
 lsce_13_tmp <- lsce_13
 phenoData(lsce_13_tmp)$cluster <- plyr::mapvalues(pData(lsce_13_tmp)$cluster,
                                                  from=1:3,
-                                                 to=c('BP','AT2','AT1'))
+                                                 to=c('AT1','BP','AT2'))
 
 plot_embedding(lsce_13_tmp)
+plot_pseudotime_density(lsce_13_tmp)
 ```
 
 We can also plot genes in pseudotime:
@@ -102,7 +105,7 @@ plot_in_pseudotime( lsce_13['Fabp5',] )
 It appears cluster 2 corresponds to `BP` cells, while cluster 1 corresponds to `AT1` and cluster 3 corresponds to `AT2` cells. We'd ideally like to have a pseudotemporal ordering ofr cells as they transition from `BP` to `AT1` and a second transitioning from `BP` to `AT2`. Let's start with the first. From visual inspection there also appear to be some outlier cells mis-classified. Let's remove them before continuing also.
 
 ```{r ps-1, cache=TRUE, fig.align='center'}
-lsce_bp_at1 <- lsce[, pData(lsce)$cluster %in% c(1,3) ]
+lsce_bp_at1 <- lsce[, pData(lsce)$cluster %in% c(1,2) ]
 lsce_bp_at1 <- fit_pseudotime(lsce_bp_at1)
 lsce_bp_at1 <- reverse_pseudotime(lsce_bp_at1)
 plot_embedding(lsce_bp_at1)
@@ -153,6 +156,7 @@ lsce_sig <- lsce_bp_at1[sig_genes,]
 ```
 
 ```{r print-at1, fig.align='center', fig.height=6, fig.width=9, cache=TRUE}
+lsce_sig <- reverse_pseudotime(lsce_sig)
 plot_pseudotime_model(lsce_sig)
 ```
 
@@ -212,13 +216,18 @@ print(setdiff(pseudotime_markers_at2, markers2))
 And plot pseudotime density:
 
 ```{r cell-density-1, cache=TRUE, fig.align='center'}
-plot_pseudotime_density(lsce_bp_at1)
+lsce_bp_at1_tmp <- lsce_bp_at1
+phenoData(lsce_bp_at1_tmp)$cluster <- plyr::mapvalues(pData(lsce_bp_at1_tmp)$cluster,
+                                                 from=1:2,
+                                                 to=c('AT1','BP'))
+
+plot_pseudotime_density(lsce_bp_at1_tmp, reverse = TRUE)
 ```
 
 ### BP to AT2 transition
 
 ```{r ps-2, cache=TRUE, fig.align='center'}
-lsce_bp_at2 <- lsce[, pData(lsce)$cluster %in% c(1,2)]
+lsce_bp_at2 <- lsce[, pData(lsce)$cluster %in% c(3,2)]
 lsce_bp_at2 <- fit_pseudotime(lsce_bp_at2)
 plot_embedding(lsce_bp_at2)
 ```
@@ -290,7 +299,18 @@ Finally plot genes going up or down in pseudotime:
 ```{r gene-up2, fig.align='center', cache=TRUE, fig.width=9, fig.height=4, message=FALSE, warning=FALSE}
 n_cuts <- 3
 gene_classes <- cutree(hc, n_cuts)
-      
+
+lines <- c()
+for(i in 1:n_cuts) {
+  genes_i <- names(which(gene_classes == i))
+  lines <- c(lines, (c(paste('class',i), '\n')))
+  lines <- c(lines, genes_i)
+}
+
+fileConn <- file('~/oxford/embeddr/gene_classes.txt')
+writeLines(lines, fileConn)
+close(fileConn)
+
 df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
 
 pe <- data.frame(scale(pe)) ## scaled pst-by-gene
@@ -315,26 +335,40 @@ ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
 ```{r at1-markers, cache=TRUE}
 markers1 <- c('Aqp5','Pdpn','Rtkn2','Ager','Emp2','Cav1','Clic5','Lmo7',
              'S100a6','Col4a3','Akap5','Cryab','Sdpr','S100a14')
-pseudotime_markers_at1 <- names(gene_classes[gene_classes %in% c(1,2)])
+pseudotime_markers_at1 <- names(gene_classes[gene_classes == 2])
+pseudotime_markers_at2_upreg <- names(gene_classes[gene_classes == 1])
 
 print(intersect(markers1, pseudotime_markers_at1))
 print(setdiff(markers1, pseudotime_markers_at1))
 print(setdiff(pseudotime_markers_at1, markers1))
 
+all_at2 <- union(pseudotime_markers_at2_upreg, pseudotime_markers_at2)
+print(intersect(markers2, all_at2))
+print(setdiff(markers2, all_at2))
+print(setdiff(all_at2, markers2))
 ```
 
 ### Bringing it all together
 
 ```{r big-heatmap, fig.align='center', fig.width=9, fig.height=4.5}
-prev_identified_1 <- pseudotime_markers_at1 %in% markers1
-prev_identified_2 <- pseudotime_markers_at2 %in% markers2
-all_pseudotime_markers <- c(pseudotime_markers_at1[prev_identified_1], pseudotime_markers_at1[!prev_identified_1],
-                            pseudotime_markers_at2[prev_identified_2], pseudotime_markers_at2[!prev_identified_2])
+agree_1 <- intersect(pseudotime_markers_at1, markers1)
+agree_2 <- intersect(all_at2, markers2)
 
-previously_identified <- c(rep('Prev', sum(1*prev_identified_1)),
-                           rep('New', sum(!prev_identified_1)),
-                           rep('Prev', sum(1*prev_identified_2)),
-                           rep('New', sum(!prev_identified_2)))
+paper_only_1 <- setdiff(markers1, pseudotime_markers_at1)
+paper_only_2 <- setdiff(markers2, all_at2)
+
+embeddr_only_1 <- setdiff(pseudotime_markers_at1, markers1)
+embeddr_only_2 <- setdiff(all_at2, markers2)
+
+all_pseudotime_markers <- c(agree_1, paper_only_1, embeddr_only_1,
+                            agree_2, paper_only_2, embeddr_only_2)
+
+previously_identified <- c(rep('Both', length(agree_1)),
+                           rep('Prev', length(paper_only_1)),
+                           rep('New', length(embeddr_only_1)),
+                           rep('Both', length(agree_2)),
+                           rep('Prev', length(paper_only_2)),
+                           rep('New', length(embeddr_only_2)))
 # prev_colors <- plyr::mapvalues(previously_identified, from=c('Prev','New'), to=c('darkgrey','lightgrey'))
 
 cell_type <- pData(lsce_13)$putative_cell_type[order(pseudotime(lsce_13))]
@@ -354,6 +388,34 @@ mm <- exprs(lsce_13[all_pseudotime_markers,order(pseudotime(lsce_13))])
 #     lwd = 5            # line width
 # )
 aheatmap(mm, Rowv = NA, Colv = NA,
-         annRow = data.frame(New = previously_identified),
+         annRow = data.frame('Time discovered' = previously_identified),
          annCol = data.frame('Cell Type' = cell_type))
 ```
+
+
+## Compare to monocle
+
+```{r compare-monocle, cache=TRUE}
+# lcds <- toCellDataSet(lsce)
+# lcds <- setOrderingFilter(lcds, het_genes)
+# lcds2 <- lcds # logs data for you
+# exprs(lcds2) <- 2^exprs(lcds) - 1
+# 
+# lcds2 <- reduceDimension(lcds2, use_irlba = FALSE)
+# lcds2 <- orderCells(lcds2, num_paths = 2)
+# plot_spanning_tree(lcds2, color_by = 'cluster')
+# 
+# cds_at_bp1 <- lcds2[,lcds$cluster %in% c('BP','AT1')]
+# cds_at_bp1 <- reduceDimension(cds_at_bp1, use_irlba=FALSE)
+# cds_at_bp1 <- orderCells(cds_at_bp1, num_paths = 1)
+# plot_spanning_tree(cds_at_bp1, color_by = 'cluster')
+# 
+# n_cells_expressed <- rowSums(exprs(cds_at_bp1) > 0)
+# keep_gene <- n_cells_expressed > 0.2 * dim(cds_at_bp1)[2]
+# cds <- cds_at_bp1[keep_gene,]
+# exprs(cds) <- exprs(cds) + 1
+# diff_test_res <- differentialGeneTest(cds)
+```
+
+
+

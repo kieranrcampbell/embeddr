@@ -1,0 +1,6 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^vignettes/embeddr_vignette_cache
+^vignettes/lung_cache
+^vignettes/embeddr_vignette_files
+^vignettes/lung_files

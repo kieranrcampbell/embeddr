@@ -17,6 +17,7 @@ Imports:
   AER,
   lmtest,
   splines,
-  scater
+  scater,
+  survival
 Suggests:
   NMF

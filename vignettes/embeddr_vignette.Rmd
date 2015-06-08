@@ -192,21 +192,15 @@ plot_in_pseudotime(sce_23[genes_to_plot,])
 
 which is largely similar to the monocle equivalent.
 
-We can also plot a heatmap of all the genes in pseudotime:
-
-```{r heatmap,  fig.width=8.5,fig.height=6, message=FALSE, cache=TRUE}
-plot_heatmap(sce_23[gene_indices,])
-```
-
 Let's have a look at the MRF family of transcription factors:
 
 ```{r mrf,  cache=TRUE}
 mrf <- c('MYOD1', 'MYF5', 'MYF6', 'MYOG') 
 mrf_ind <- sapply(mrf, match, fData(sce_23)$gene_short_name)
 
-plot_in_pseudotime(sce_23[mrf_ind,])
-
-plot_pseudotime_model(sce_23[mrf_ind,])
+# plot_in_pseudotime(sce_23[mrf_ind,])
+# 
+# plot_pseudotime_model(sce_23[mrf_ind,])
 ```
 
 ## Robustness of the embedding

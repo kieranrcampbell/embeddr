@@ -1,30 +1,27 @@
 ---
 title: "Converting Quake et al to `scater` object"
 author: "Kieran Campbell"
-date: "04/21/2015"
+date: "08/6/2015"
 output: html_document
 ---
 
-```{r load-libraries, message=FALSE}
+This vignette outlines quick conversion from the [Quake et al.](http://www.nature.com/nature/journal/v509/n7500/full/nature13173.html) dataset (available to download [here](http://www.nature.com/nature/journal/v509/n7500/extref/nature13173-s4.txt)) to a `scater` object for use with `embeddr`.
+
+```{r load-libraries, message=FALSE, warning=FALSE}
 library(scater)
 library(devtools)
 library(data.table)
 library(dplyr)
 ```
 
-Load embeddr (optional):
-```{r load-embeddr}
-embeddr_path <- "/net/isi-scratch/kieran/embeddr/embeddr" #'~/oxford/embeddr/embeddr' # 
-load_all(embeddr_path)
-```
-
-Load the data:
+After downloading the data, save it to the path defined by `data_path`:
 ```{r load-data}
-data_path <-  "/net/isi-scratch/kieran//datasets/lung/data.txt" # '~/oxford/embeddr/data//data.txt' #
+## replace with your downloaded path:
+data_path <-  "~/oxford/embeddr/data/nature13173-s4.txt"
+
 d <- fread(data_path, data.table=FALSE)
 
 ## remove bulk samples:
-
 d <- dplyr::filter(d, putative_cell_type != 'bulk')
 ```
 
@@ -35,12 +32,12 @@ d_numeric <- select(d, -cell_name, -time_point, -sample, -putative_cell_type)
 d_pheno <- select(d, cell_name, time_point, sample, putative_cell_type)
 
 pd <- new('AnnotatedDataFrame', data=d_pheno)
-sce <- newSCESet(cellData = t(d_numeric), phenoData = pd)
+lsce <- newSCESet(exprsData = t(d_numeric), phenoData = pd)
 
-print(sce)
+print(lsce)
 ```
 
 Now save to an R object for easy loading:
 ```{r save-sce}
-save(sce, file='lung_sce.RData.gz', compress='gzip')
+save(lsce, file='~/oxford/embeddr/data/lsce.Rdata', compress='gzip')
 ```

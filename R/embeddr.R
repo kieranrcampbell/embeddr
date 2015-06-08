@@ -492,6 +492,8 @@ plot_graph <- function(sce) {
 #' @export
 #' @importFrom AER tobit
 #' @importFrom splines bs
+#' @importFrom survival survreg
+#' @importFrom survival Surv
 #'
 #' @return An object of class VGAM
 fit_pseudotime_model <- function(sce, gene) {
@@ -499,7 +501,7 @@ fit_pseudotime_model <- function(sce, gene) {
   y <- exprs(sce)[gene ,]
   min_expr <- sce@lowerDetectionLimit # see paper
   b <- bs(t, df=3)
-  fit <- tobit(y ~ b, left = min_expr)
+  fit <- AER::tobit(y ~ b, left = min_expr)
   return( fit )
 }
 
@@ -557,10 +559,8 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
   df$predicted[df$predicted < min_expr] <- min_expr
   df$min_expr <- min_expr
   
-  plt <- ggplot(df)  + geom_line(aes_string(x = "pseudotime", y = "predicted", 
-                                            color = "Predicted")) +
-    theme_minimal() + geom_line(aes_string(x = "pseudotime", y = "min_expr", 
-                                           color = "Min expr"), linetype=2) +
+  plt <- ggplot(df)  + geom_line(aes_string(x = "pseudotime", y = "predicted"), color = 'red') + 
+    theme_minimal() + geom_line(aes_string(x = "pseudotime", y = "min_expr"), color='grey', linetype=2) +
     scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red')) +
     geom_point(aes_string(x = "pseudotime", y = "exprs")) + facet_wrap(~ gene) +
     ylab('expression')
@@ -624,7 +624,6 @@ gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
 #' can be applied using the R function \code{p.adjust}.
 #' 
 #' @export
-#' 
 pseudotime_test <- function(sce, n_cores = 2) {
   p_vals <- NULL
   if(n_cores == 1) {
