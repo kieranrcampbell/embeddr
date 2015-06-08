@@ -6,7 +6,19 @@
 \usage{
 predicted_expression(sce, models = NULL, n_cores = 2)
 }
+\arguments{
+\item{sce}{An object of class \code{SCESet}}
+
+\item{models}{An object representing models. If of type \code{list} then for each element
+the predicted expression is computed and a matrix returned. If of type \code{model} for
+which a \code{predict} function is available, then a single vector corresponding to
+\code{predict(model)} is returned. If NULL then the model is computed for all genes in
+\code{sce} and the resulting list returned.}
+
+\item{n_cores}{The number of cores to pass to \code{mcapply}.}
+}
 \description{
-Create a predicted expression matrix
+Given a list of models return a matrix corresponding to the prediction from the models.
+Each column represents a gene and each row its expression at a given point in pseudotime.
 }
 

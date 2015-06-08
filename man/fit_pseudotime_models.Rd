@@ -6,7 +6,13 @@
 \usage{
 fit_pseudotime_models(sce, n_cores = 2)
 }
+\arguments{
+\item{sce}{An object of class \code{SCESet}}
+
+\item{n_cores}{The number of cores to use in the call to \code{mcapply}}
+}
 \description{
-\strong{WARNING}: The list returned can be huge, so use only on a few genes.
+This will iterate over every gene in the \code{SCESet} and produce a model fit
+for each. \strong{WARNING}: The list returned can be huge, so use only on a few genes.
 }
 

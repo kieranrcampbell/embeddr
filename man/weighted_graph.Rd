@@ -5,7 +5,7 @@
 \title{Construct a weighted graph adjacency matrix}
 \usage{
 weighted_graph(x, kernel = c("nn", "dist", "heat"),
-  metric = c("correlation", "euclidean"), nn = round(log(ncol(sce))),
+  metric = c("correlation", "euclidean"), nn = round(log(ncol(x))),
   eps = NULL, t = NULL, symmetrize = c("mean", "ceil", "floor"))
 }
 \arguments{
@@ -14,6 +14,9 @@ weighted_graph(x, kernel = c("nn", "dist", "heat"),
 \item{kernel}{The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
 Belkin & Niyogi}
+
+\item{metric}{The metric with which to assess 'closeness' for nearest neighbour selection, one of
+"correlation" (pearson) or "euclidean". Default is "correlation".}
 
 \item{nn}{Number of nearest neighbours if kernel == 'nn'}
 

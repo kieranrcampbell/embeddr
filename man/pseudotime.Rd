@@ -6,10 +6,13 @@
 \usage{
 pseudotime(sce)
 }
+\arguments{
+\item{sce}{An object of class \code{SCESet}}
+}
 \value{
 A numeric vector of pseudotimes
 }
 \description{
-Retrieve the pseudotime assignment from sce
+Equivalent to \code{pData(sce)$pseudotime}
 }
 

@@ -4,7 +4,13 @@
 \alias{plot_pseudotime_metrics}
 \title{Plot metrics in pseudotime}
 \usage{
-plot_pseudotime_metrics(sce, gene, window_size = NULL)
+plot_pseudotime_metrics(sce, ...)
+}
+\arguments{
+\item{sce}{An object of class \code{SCESet}}
+
+\item{...}{Additional arguments to be passed to \code{calculate_metrics} concerning
+how the metrics are calculated.}
 }
 \value{
 A ggplot graphic

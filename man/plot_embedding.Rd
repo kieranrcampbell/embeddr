@@ -12,7 +12,7 @@ plot_embedding(sce, color_by = "cluster")
 \item{color_by}{The variable to color the embedding with (defaults to cluster)}
 }
 \value{
-A \code{ggplot2} plot
+A \pkg{ggplot2} plot
 }
 \description{
 This function takes a data frame with at least positional (component_0 & component_1) information

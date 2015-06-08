@@ -15,6 +15,8 @@
 #' @param kernel The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
 #' 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
 #' Belkin & Niyogi
+#' @param metric The metric with which to assess 'closeness' for nearest neighbour selection, one of
+#' "correlation" (pearson) or "euclidean". Default is "correlation".
 #' @param nn Number of nearest neighbours if kernel == 'nn'
 #' @param eps Maximum distance parameter if kernel == 'dist'
 #' @param t 'time' for heat kernel if kernel == 'heat'
@@ -30,6 +32,8 @@
 #' type is 'unorm' (default), then the graph measure used is the identity matrix, while if type is 'norm' then the measure
 #' used is the degree matrix. 
 #' @param p Dimension of the embedded space, default is 2
+#' 
+#' @import scater
 #'
 #' @export
 #' @return An object of class SCESet
@@ -62,6 +66,8 @@ embeddr <- function(sce, genes_for_embedding = NULL,
 #' @param kernel The choice of kernel. 'nn' will give nearest neighbours, 'dist' gives minimum distance and
 #' 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
 #' Belkin & Niyogi
+#' @param metric The metric with which to assess 'closeness' for nearest neighbour selection, one of
+#' "correlation" (pearson) or "euclidean". Default is "correlation".
 #' @param nn Number of nearest neighbours if kernel == 'nn'
 #' @param eps Maximum distance parameter if kernel == 'dist'
 #' @param t 'time' for heat kernel if kernel == 'heat'
@@ -78,7 +84,7 @@ embeddr <- function(sce, genes_for_embedding = NULL,
 #' @return An n by n adjacency matrix
 weighted_graph <- function(x, kernel = c('nn','dist','heat'),
                            metric=c('correlation', 'euclidean'),
-                           nn = round(log(ncol(sce))), eps = NULL, t = NULL,
+                           nn = round(log(ncol(x))), eps = NULL, t = NULL,
                            symmetrize = c('mean','ceil','floor')) {
   ## sanity checking
   kernel <- match.arg(kernel)
@@ -178,14 +184,16 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2) {
 
 #' Plot the degree distribution of the weight matrix
 #'
-#' @param The SCESet object
+#' @param W A cell-by-cell correlation graph.
 #' @param ignore_weights If TRUE weights are discretised to 0 - 1
+#' 
+#' @import ggplot2
 #' @export
 #' @return A ggplot histogram of weights
 plot_degree_dist <- function(W, ignore_weights = FALSE) {
   x <- NULL
   if(ignore_weights) {
-    x <- rowSums(ceil(W))
+    x <- rowSums(ceiling(W))
   } else {
     x <- rowSums(W)
   }
@@ -200,61 +208,59 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' Cluster the embedded representation using either kmeans or mixture models
 #' from the mclust package
 #'
-#' @param The SCESet object
+#' @param sce The SCESet object
 #' @param k The number of clusters to find in the data
 #' @param method Either 'kmeans' or 'mm' to use \code{mclust}
 #' @export
+#' @import mclust
+#' @importFrom dplyr select
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
-  library(dplyr)
-  M_xy <- dplyr::select(pData(sce), component_1, component_2)
+  component_1 <- component_2 <- NULL # satisfy R CMD check
+  M_xy <- select(pData(sce), component_1, component_2)
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
     phenoData(sce)$cluster <- km$cluster
   } else if(method == 'mm') {
-    library(mclust)
     mc <- Mclust(M_xy, G=k)
     phenoData(sce)$cluster <- as.factor(mc$classification)
   }
   return( sce )
 }
 
-fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
-  library(dplyr)
-  library(igraph)
-  library(Matrix)
-  load_all("/net/isi-scratch/kieran/embeddr/curver/")
-
-  Mp <- M
-  if(!is.null(clusters)) Mp <- filter(Mp, cluster %in% clusters)
-  Y <- curver::reconstruct(select(Mp, component_1, component_2), niter=1, h=0.2)
-  #Y <- curver::reconstruct(select(Mp, component_1, component_2), ...)
-
-  D <- as.matrix(dist(Y))
-  g <- graph.adjacency(D, weighted=TRUE, mode='undirected')
-  g_mst <- minimum.spanning.tree(g)
-  A <- as.matrix(get.adjacency(g_mst))
-  endpoints <- which(rowSums(A) == 1)
-  ordering <- get.shortest.paths(g_mst, from=endpoints)
-  paths <- ordering$vpath
-  best_path <- paths[[ which.max(sapply(paths, length)) ]]
-
-  Z <- Y[ordering$vpath[[1]],]
-
-  ## now we have the ordering want to work out the arc-length
-  n <- dim(Z)[1]
-  Z_start <- Z[1:n-1,]
-  Z_end <- Z[2:n,]
-  Z_diff <- Z_end - Z_start
-  pst <- sqrt(rowSums(Z_diff^2))
-  pseudotime <- c(0, cumsum(pst))
-  Mp$pseudotime <- pseudotime[invPerm(as.integer(ordering$vpath[[1]]))]
-  Mp$trajectory_1 <- Y[,1]
-  Mp$trajectory_2 <- Y[,2]
-  return(Mp)
-}
+# fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
+#   load_all("/net/isi-scratch/kieran/embeddr/curver/")
+# 
+#   Mp <- M
+#   if(!is.null(clusters)) Mp <- filter(Mp, cluster %in% clusters)
+#   Y <- curver::reconstruct(select(Mp, component_1, component_2), niter=1, h=0.2)
+#   #Y <- curver::reconstruct(select(Mp, component_1, component_2), ...)
+# 
+#   D <- as.matrix(dist(Y))
+#   g <- graph.adjacency(D, weighted=TRUE, mode='undirected')
+#   g_mst <- minimum.spanning.tree(g)
+#   A <- as.matrix(get.adjacency(g_mst))
+#   endpoints <- which(rowSums(A) == 1)
+#   ordering <- get.shortest.paths(g_mst, from=endpoints)
+#   paths <- ordering$vpath
+#   best_path <- paths[[ which.max(sapply(paths, length)) ]]
+# 
+#   Z <- Y[ordering$vpath[[1]],]
+# 
+#   ## now we have the ordering want to work out the arc-length
+#   n <- dim(Z)[1]
+#   Z_start <- Z[1:n-1,]
+#   Z_end <- Z[2:n,]
+#   Z_diff <- Z_end - Z_start
+#   pst <- sqrt(rowSums(Z_diff^2))
+#   pseudotime <- c(0, cumsum(pst))
+#   Mp$pseudotime <- pseudotime[invPerm(as.integer(ordering$vpath[[1]]))]
+#   Mp$trajectory_1 <- Y[,1]
+#   Mp$trajectory_2 <- Y[,2]
+#   return(Mp)
+# }
 
 #' Fit the pseudotime curve
 #'
@@ -263,6 +269,10 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' @param sce The SCESet object
 #' @param clusters The (numeric) clusters to use for the curve fitting. If NULL (default) then
 #' all points are used
+#' @param ... Additional arguments to be passed to \code{princurve} from \pkg{principal.curve}.
+#' 
+#' @importFrom dplyr select
+#' @importFrom princurve principal.curve
 #' 
 #' @export
 #'
@@ -272,16 +282,15 @@ fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
 #' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
 fit_pseudotime <- function(sce, clusters = NULL, ...) {
-  library(princurve)
-  library(dplyr)
-  M <- dplyr::select(pData(sce), component_1, component_2)
+  component_1 <- component_2 <- NULL # satisfy R CMD check
+  M <- select(pData(sce), component_1, component_2)
   n_cells <- dim(sce)[2]
   
   cells_in_cluster <- rep(TRUE, n_cells)
   if(!is.null(clusters)) cells_in_cluster <- pData(sce)$cluster %in% clusters
   
   Mcl <- M[cells_in_cluster, ]
-  pc <- principal.curve(x = as.matrix(dplyr::select(Mcl, component_1, component_2)), ...)
+  pc <- principal.curve(x = as.matrix(select(Mcl, component_1, component_2)), ...)
   pst <- pc$lambda
   pst <- (pst - min(pst)) / (max(pst) - min(pst))
   
@@ -305,13 +314,20 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #' @param sce The SCESet object
 #' @param color_by The variable to color the embedding with (defaults to cluster)
 #' 
+#' @import ggplot2
+#' @importFrom dplyr select
+#' @importFrom dplyr arrange
 #' @export
 #'
-#' @return A \code{ggplot2} plot
+#' @return A \pkg{ggplot2} plot
 plot_embedding <- function(sce, color_by = 'cluster') {
+  ## satisfy R CMD check
+  component_1 <- component_2 <- NULL
+  trajectory_1 <- trajectory_2 <- NULL
+  
   M <- dplyr::select(pData(sce), component_1, component_2)
   
-  
+
 #   if('cluster' %in% names(pData(sce))) {
 #     M <- cbind(M, select(pData(sce), cluster))
 #     color_by <- 'pseudotime'
@@ -321,7 +337,7 @@ plot_embedding <- function(sce, color_by = 'cluster') {
     M <- cbind(M, dplyr::select(pData(sce), col))
   }
   if('pseudotime' %in% names(pData(sce))) {
-    M <- cbind(M, dplyr::select(pData(sce), pseudotime, trajectory_1, trajectory_2))
+    M <- cbind(M, select(pData(sce), pseudotime, trajectory_1, trajectory_2))
     M <- arrange(M, pseudotime)
   }
   
@@ -342,12 +358,13 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 
 
   } else {
-    plt <- plt + geom_point(aes(x = component_1, y = component_2))
+    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"))
   }
 
   if("pseudotime" %in% names(M)) {
     ## curve has been fit so plot all
-    plt <- plt + geom_path(aes(x = trajectory_1, y = trajectory_2), data=M, color='black',
+    plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"), 
+                           data=M, color='black',
                            size = 1, alpha = 0.7, linetype=2)
   }
   plt <- plt + xlab('Component 1') + ylab('Component 2') 
@@ -358,22 +375,20 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'
 #' Plot a set of genes through pseudotime
 #'
-#'  @param Mp A dataframe containing the embedding
-#'  @param xp The gene-by-cell matrix of log normalised expression counts
-#'  @param genes The genes to use for the embedding
-#'  @param short_names Short gene names to display; default NULL and \code{genes} is used for gene names
+#'  @param sce An object of class \code{SCESet}
 #'  @param nrow Number of rows of plots; passed to \code{facet_wrap}
 #'  @param ncol Number of columns of plots; passed to \code{facet_wrap}
+#'  @param use_short_names Logical If \code{pData(sce)} contains a \code{gene_short_name}
+#'  column (such as in the \pkg{monocle} dataset \code{HSMM}) then the names in the resulting
+#'  plot will be the gene short names.
 #'  
 #'  @export
+#'  @import ggplot2
+#'  @importFrom reshape2 melt
 #'
-#'  @return A \code{ggplot2} plot
+#'  @return A \pkg{ggplot2} plot
 plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE) {
-  library(reshape2)
-  library(dplyr)
-
   xp <- data.frame(t(exprs(sce)), check.names = FALSE) # now cell-by-gene
-  ## xp <- dplyr::select(xp, one_of(genes))
   if(use_short_names) names(xp) <- fData(sce)$gene_short_name
   
   xp$pseudotime <- pData(sce)$pseudotime
@@ -387,9 +402,9 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = 
 
   plt <- NULL
   if(cn) {
-    plt <- ggplot(data=df_x, aes(x=pseudotime, y=counts, color=cluster))
+    plt <- ggplot(data=df_x, aes_string(x="pseudotime", y="counts", color="cluster"))
   } else {
-    plt <- ggplot(data=df_x, aes(x=pseudotime, y=counts))
+    plt <- ggplot(data=df_x, aes_string(x="pseudotime", y="counts"))
   }
 
   return( plt + geom_point(size=1.5) +
@@ -399,33 +414,46 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = 
 
 #' Reverse pseudotime
 #'
-#' Reverse the pseudotimes of cells
+#' Reverse the pseudotimes of cells via pseudotime x -> -x + max(x) + min(x)
 #'
-#' @param M A dataframe containing a pseudotime variable to be reversed
+#' @param sce An object of class \code{SCESet}
 #' 
 #' @export
-#' @return A dataframe with the reversed pseudotime
+#' @return \code{sce} with the pseudotime reversed.
 reverse_pseudotime <- function(sce) {
   reverse <- function(x) -x + max(x) + min(x)
   phenoData(sce)$pseudotime <- reverse(pData(sce)$pseudotime)
   return( sce )
 }
 
-plot_heatmap <- function(sce, ...) {
-  library(gplots)
-  xp <- exprs(sce)[,order(pData(sce)$pseudotime)]
-
-  heatmap.2(xp, dendrogram="none", Colv=FALSE,
-            col=redblue(256), trace="none", density.info="none", scale="row", ...)
-}
+# plot_heatmap <- function(sce, ...) {
+#   xp <- exprs(sce)[,order(pData(sce)$pseudotime)]
+# 
+#   heatmap.2(xp, dendrogram="none", Colv=FALSE,
+#             col=redblue(256), trace="none", density.info="none", scale="row", ...)
+# }
 
 #' Plot the nearest neighbour graph in the embedding
 #' 
+#' This plots the cells in the reduced dimension and connects cells if they are
+#' connected in the nearest neighbour graph W. A vertice between cells i and j is
+#' coloured red if both i and j are nearest neigbours of each other and grey otherwise.
+#' 
+#' @param sce An object of class \code{SCESet}
+#' 
 #' @export
+#' @import ggplot2
+#' @importFrom dplyr select
+#' @importFrom plyr mapvalues
+#' @import scater
 #' 
 #' @return A ggplot graphic
 plot_graph <- function(sce) {
-  df <- dplyr::select(pData(sce), x = component_1, y = component_2)
+  ## satisfy R CMD check
+  component_1 <- component_2 <- NULL
+  x <- y <- NULL
+  
+  df <- select(pData(sce), x = component_1, y = component_2)
   W <- cellDist(sce)
   
   diag(W) <- 0
@@ -434,17 +462,17 @@ plot_graph <- function(sce) {
     xy_from <- df[xy[1],]
     xy_to <- df[xy[2],]
     xx <- c(xy_from, xy_to)
-    ##print(class(xx))
     names(xx) <- c('x_from','y_from','x_to','y_to')
     unlist(xx)
   })
   colnames(from_to) <- NULL
   from_to <- data.frame(t(from_to))
-  from_to$connect <- plyr::mapvalues(W[locs], c(0.5, 1), c('Single','Both'))
+  from_to$connect <- mapvalues(W[locs], c(0.5, 1), c('Single','Both'))
   cols <- c('Single' = 'grey', 'Both' = 'red')
 
   plt <- ggplot() +
-    geom_segment(data=from_to, aes(x=x_from, xend=x_to, y=y_from, yend=y_to, color=connect),
+    geom_segment(data=from_to, aes_string(x="x_from", xend="x_to", 
+                                          y="y_from", yend="y_to", color="connect"),
                  alpha=0.5, linetype=1) +
         theme_minimal() + scale_color_manual(values = cols) + geom_point(data=df, aes(x=x,y=y))
   plt + xlab('x') + ylab('y')
@@ -462,15 +490,16 @@ plot_graph <- function(sce) {
 #' @param sce An object of type SCESet
 #' @param gene The gene name to fit 
 #' @export
+#' @importFrom AER tobit
+#' @importFrom splines bs
 #'
 #' @return An object of class VGAM
 fit_pseudotime_model <- function(sce, gene) {
-  library(AER)
   t <- pData(sce)$pseudotime
   y <- exprs(sce)[gene ,]
   min_expr <- sce@lowerDetectionLimit # see paper
   b <- bs(t, df=3)
-  fit <- AER::tobit(y ~ b, left = min_expr)
+  fit <- tobit(y ~ b, left = min_expr)
   return( fit )
 }
 
@@ -485,7 +514,6 @@ fit_pseudotime_model <- function(sce, gene) {
 #' 
 #' @return An object of class VGAM
 fit_null_model <- function(sce, gene) {
-  library(AER)
   y <- exprs(sce)[gene,]
   min_expr <- sce@lowerDetectionLimit
   return( AER::tobit(y ~ 1, left = min_expr) )
@@ -498,6 +526,8 @@ fit_null_model <- function(sce, gene) {
 #' re-calculated
 #' @param n_cores Number of cores to use when calculating the pseudotime models if `model` is NULL
 #' 
+#' @import ggplot2
+#' @importFrom reshape2 melt
 #' @export
 #' 
 #' @return An plot object from \code{ggplot}
@@ -517,20 +547,22 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
   names(y) <- gene_names
   
   y$pseudotime <- pData(sce)$pseudotime
-  y_melted <- reshape2::melt(y, id.vars='pseudotime', value.name='exprs', variable.name='gene')
+  y_melted <- melt(y, id.vars='pseudotime', value.name='exprs', variable.name='gene')
   pe <- data.frame(predicted_expression(sce, models))
   names(pe) <- gene_names
   pe$pseudotime <- pData(sce)$pseudotime
-  pe_melted <- reshape2::melt(pe, id.vars='pseudotime', value.name='predicted', variable.name='gene')
+  pe_melted <- melt(pe, id.vars='pseudotime', value.name='predicted', variable.name='gene')
   
   df <- dplyr::full_join(y_melted, pe_melted, by=c('pseudotime','gene'))
   df$predicted[df$predicted < min_expr] <- min_expr
   df$min_expr <- min_expr
   
-  plt <- ggplot(df)  + geom_line(aes(x=pseudotime,y=predicted, color='Predicted')) +
-    theme_minimal() + geom_line(aes(x=pseudotime, y=min_expr, color='Min expr'), linetype=2) +
+  plt <- ggplot(df)  + geom_line(aes_string(x = "pseudotime", y = "predicted", 
+                                            color = "Predicted")) +
+    theme_minimal() + geom_line(aes_string(x = "pseudotime", y = "min_expr", 
+                                           color = "Min expr"), linetype=2) +
     scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red')) +
-    geom_point(aes(x=pseudotime, y=exprs)) + facet_wrap(~ gene) +
+    geom_point(aes_string(x = "pseudotime", y = "exprs")) + facet_wrap(~ gene) +
     ylab('expression')
   return( plt )
 }
@@ -546,10 +578,10 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
 #' @param null_model The null model y ~ 1
 #' 
 #' @export
+#' @importFrom lmtest lrtest
 #'
 #' @return The p-value
 compare_models <- function(model, null_model) {
-  require(lmtest)
   lrt <- lrtest(model, null_model) # VGAM <-> lmtest
   return( lrt$"Pr(>Chisq)"[2] ) # lmtest
   #lrt@Body["Pr(>Chisq)"][2, ]  # VGAM
@@ -577,7 +609,19 @@ gene_pseudotime_test <- function(gene_name, sce, full_model = NULL) {
   })
 }
 
-#' pseudotime gene testing
+#' Pseudotime gene testing
+#' 
+#' This function fits both smoothing B-spline tobit regression models for \strong{all}
+#' genes in \code{sce} and computes p-values by comparing to the null model using
+#' a likelihood ratio test. 
+#' 
+#' @param sce An object of class \code{SCESet}. If only a certain number of genes are desired to
+#' be tested then \code{sce} must be subsetted before the function call.
+#' @param n_cores The number of cores used in the call to \code{mcapply}
+#' 
+#' @return A \code{data.frame} with three columns: the gene name, the unadjusted p-value and 
+#' the Benjamini-Hochberg adjusted q-value. Note that different multiple testing corrections
+#' can be applied using the R function \code{p.adjust}.
 #' 
 #' @export
 #' 
@@ -596,7 +640,11 @@ pseudotime_test <- function(sce, n_cores = 2) {
 
 #' Generate a list of pseudotime models corresponding to ALL genes in sce
 #' 
-#' \strong{WARNING}: The list returned can be huge, so use only on a few genes. 
+#' This will iterate over every gene in the \code{SCESet} and produce a model fit
+#' for each. \strong{WARNING}: The list returned can be huge, so use only on a few genes. 
+#' 
+#' @param sce An object of class \code{SCESet}
+#' @param n_cores The number of cores to use in the call to \code{mcapply}
 #' 
 #' @export
 fit_pseudotime_models <- function(sce, n_cores = 2) {
@@ -612,6 +660,17 @@ fit_pseudotime_models <- function(sce, n_cores = 2) {
 }
 
 #' Create a predicted expression matrix
+#' 
+#' Given a list of models return a matrix corresponding to the prediction from the models.
+#' Each column represents a gene and each row its expression at a given point in pseudotime.
+#' 
+#' @param sce An object of class \code{SCESet}
+#' @param models An object representing models. If of type \code{list} then for each element
+#' the predicted expression is computed and a matrix returned. If of type \code{model} for
+#' which a \code{predict} function is available, then a single vector corresponding to 
+#' \code{predict(model)} is returned. If NULL then the model is computed for all genes in
+#' \code{sce} and the resulting list returned.
+#' @param n_cores The number of cores to pass to \code{mcapply}.
 #' 
 #' @export
 predicted_expression <- function(sce, models = NULL, n_cores = 2) {
@@ -643,14 +702,18 @@ predicted_expression <- function(sce, models = NULL, n_cores = 2) {
   
 #' Plot density of cells in pseudotime
 #' 
-#' @param sce An object of class SCESet
+#' This returns a \code{ggplot} density plot of the cells across pseudotime.
 #' 
+#' @param sce An object of class SCESet
+#' @param reverse Logical If true the pseudotime will be reversed.
+#' 
+#' @import ggplot2
 #' @export
 #' @return A `ggplot` object
-plot_pseudotime_density <- function(sce) {
-  t <- pData(sce)$pseudotime
-  ggplot(data.frame(t=t)) + geom_density(aes(x=t), fill='darkred') + theme_bw() + 
-    xlab('Pseudotime') + ylab('Cellular density')
+plot_pseudotime_density <- function(sce, reverse = FALSE) {
+  if(reverse) sce <- reverse_pseudotime(sce)
+  ggplot(pData(sce)) + geom_density(aes_string(x = "pseudotime", fill = "cluster")) + 
+    theme_bw() + xlab('Pseudotime') + ylab('Cellular density')
 }
 
 #' Plot metrics in pseudotime
@@ -658,19 +721,29 @@ plot_pseudotime_density <- function(sce) {
 #' Plot various metrics (mean, variance, CV2 and signal-to-noise ratio) using
 #' a sliding window approach
 #' 
+#' @param sce An object of class \code{SCESet}
+#' @param ... Additional arguments to be passed to \code{calculate_metrics} concerning
+#' how the metrics are calculated.
+#' 
+#' @import ggplot2
+#' @importFrom reshape2 melt
 #' @export
 #' @return A ggplot graphic
-plot_pseudotime_metrics <- function(sce, gene, window_size=NULL) {
-  df_window <- calculate_metrics(sce, gene, window_size)
+plot_pseudotime_metrics <- function(sce, ...) {
+  df_window <- calculate_metrics(sce, ...)
   df_window <- melt(df_window, id='t')
-  ggplot(df_window, aes(x=t,y=value,color=variable)) + geom_line() + 
-    theme_bw() + xlab('Pseudotime')
+  ggplot(df_window, aes_string(x = "t", y = "value", color = "variable")) + 
+    geom_line() + theme_bw() + xlab('Pseudotime')
 }
 
 #' Calculate metrics through pseudotime
 #' 
 #' Calculate various metrics (mean, variance, CV2 and signal-to-noise ratio) using
 #' a sliding window approach
+#' 
+#' @param sce A \code{SCESet} object
+#' @param gene The gene of interest on which to calculate the metrics
+#' @param window_size The size of the sliding window. By default taken to be half the number of cells
 #' 
 #' @export
 #' @return An object of class `data.frame` where each column is a metric (window-averaged pseudotime,
@@ -699,6 +772,11 @@ calculate_metrics <- function(sce, gene, window_size=NULL) {
 }
 
 #' Retrieve the pseudotime assignment from sce
+#' 
+#' Equivalent to \code{pData(sce)$pseudotime}
+#' 
+#' @param sce An object of class \code{SCESet}
+#' @export
 #' 
 #' @return A numeric vector of pseudotimes
 pseudotime <- function(sce) {

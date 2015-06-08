@@ -6,10 +6,15 @@
 \usage{
 plot_graph(sce)
 }
+\arguments{
+\item{sce}{An object of class \code{SCESet}}
+}
 \value{
 A ggplot graphic
 }
 \description{
-Plot the nearest neighbour graph in the embedding
+This plots the cells in the reduced dimension and connects cells if they are
+connected in the nearest neighbour graph W. A vertice between cells i and j is
+coloured red if both i and j are nearest neigbours of each other and grey otherwise.
 }
 

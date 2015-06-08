@@ -6,6 +6,13 @@
 \usage{
 calculate_metrics(sce, gene, window_size = NULL)
 }
+\arguments{
+\item{sce}{A \code{SCESet} object}
+
+\item{gene}{The gene of interest on which to calculate the metrics}
+
+\item{window_size}{The size of the sliding window. By default taken to be half the number of cells}
+}
 \value{
 An object of class `data.frame` where each column is a metric (window-averaged pseudotime,
 mean, variance, CV2, signal to noise ratio)

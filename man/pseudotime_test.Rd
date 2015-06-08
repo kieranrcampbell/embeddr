@@ -2,11 +2,24 @@
 % Please edit documentation in R/embeddr.R
 \name{pseudotime_test}
 \alias{pseudotime_test}
-\title{pseudotime gene testing}
+\title{Pseudotime gene testing}
 \usage{
 pseudotime_test(sce, n_cores = 2)
 }
+\arguments{
+\item{sce}{An object of class \code{SCESet}. If only a certain number of genes are desired to
+be tested then \code{sce} must be subsetted before the function call.}
+
+\item{n_cores}{The number of cores used in the call to \code{mcapply}}
+}
+\value{
+A \code{data.frame} with three columns: the gene name, the unadjusted p-value and
+the Benjamini-Hochberg adjusted q-value. Note that different multiple testing corrections
+can be applied using the R function \code{p.adjust}.
+}
 \description{
-pseudotime gene testing
+This function fits both smoothing B-spline tobit regression models for \strong{all}
+genes in \code{sce} and computes p-values by comparing to the null model using
+a likelihood ratio test.
 }
 

@@ -7,9 +7,9 @@
 plot_degree_dist(W, ignore_weights = FALSE)
 }
 \arguments{
-\item{ignore_weights}{If TRUE weights are discretised to 0 - 1}
+\item{W}{A cell-by-cell correlation graph.}
 
-\item{The}{SCESet object}
+\item{ignore_weights}{If TRUE weights are discretised to 0 - 1}
 }
 \value{
 A ggplot histogram of weights

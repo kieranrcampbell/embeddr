@@ -7,12 +7,12 @@
 reverse_pseudotime(sce)
 }
 \arguments{
-\item{M}{A dataframe containing a pseudotime variable to be reversed}
+\item{sce}{An object of class \code{SCESet}}
 }
 \value{
-A dataframe with the reversed pseudotime
+\code{sce} with the pseudotime reversed.
 }
 \description{
-Reverse the pseudotimes of cells
+Reverse the pseudotimes of cells via pseudotime x -> -x + max(x) + min(x)
 }
 

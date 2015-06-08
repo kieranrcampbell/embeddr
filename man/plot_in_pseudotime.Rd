@@ -7,20 +7,18 @@
 plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE)
 }
 \arguments{
+\item{sce}{An object of class \code{SCESet}}
+
 \item{nrow}{Number of rows of plots; passed to \code{facet_wrap}}
 
 \item{ncol}{Number of columns of plots; passed to \code{facet_wrap}}
 
-\item{Mp}{A dataframe containing the embedding}
-
-\item{xp}{The gene-by-cell matrix of log normalised expression counts}
-
-\item{genes}{The genes to use for the embedding}
-
-\item{short_names}{Short gene names to display; default NULL and \code{genes} is used for gene names}
+\item{use_short_names}{Logical If \code{pData(sce)} contains a \code{gene_short_name}
+ column (such as in the \pkg{monocle} dataset \code{HSMM}) then the names in the resulting
+ plot will be the gene short names.}
 }
 \value{
-A \code{ggplot2} plot
+A \pkg{ggplot2} plot
 }
 \description{
 Plot a set of genes through pseudotime

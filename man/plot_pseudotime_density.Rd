@@ -4,15 +4,17 @@
 \alias{plot_pseudotime_density}
 \title{Plot density of cells in pseudotime}
 \usage{
-plot_pseudotime_density(sce)
+plot_pseudotime_density(sce, reverse = FALSE)
 }
 \arguments{
 \item{sce}{An object of class SCESet}
+
+\item{reverse}{Logical If true the pseudotime will be reversed.}
 }
 \value{
 A `ggplot` object
 }
 \description{
-Plot density of cells in pseudotime
+This returns a \code{ggplot} density plot of the cells across pseudotime.
 }
 

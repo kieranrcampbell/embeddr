@@ -11,6 +11,8 @@ fit_pseudotime(sce, clusters = NULL, ...)
 
 \item{clusters}{The (numeric) clusters to use for the curve fitting. If NULL (default) then
 all points are used}
+
+\item{...}{Additional arguments to be passed to \code{princurve} from \pkg{principal.curve}.}
 }
 \value{
 The dataframe \code{M} with three new variables:

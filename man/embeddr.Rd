@@ -19,6 +19,9 @@ object contains the full original gene set found in sce.}
 'heat' gives a heat kernel. Discussed in detail in 'Laplacian Eigenmaps and Spectral Techniques for Embedding and Clustering',
 Belkin & Niyogi}
 
+\item{metric}{The metric with which to assess 'closeness' for nearest neighbour selection, one of
+"correlation" (pearson) or "euclidean". Default is "correlation".}
+
 \item{nn}{Number of nearest neighbours if kernel == 'nn'}
 
 \item{eps}{Maximum distance parameter if kernel == 'dist'}

@@ -7,11 +7,11 @@
 cluster_embedding(sce, k = NULL, method = c("kmeans", "mm"))
 }
 \arguments{
+\item{sce}{The SCESet object}
+
 \item{k}{The number of clusters to find in the data}
 
 \item{method}{Either 'kmeans' or 'mm' to use \code{mclust}}
-
-\item{The}{SCESet object}
 }
 \value{
 The dataframe M with a new numeric variable `cluster` containing the assigned cluster

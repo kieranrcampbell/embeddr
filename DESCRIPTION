@@ -2,6 +2,7 @@ Package: embeddr
 Title: Laplacian eigenmaps & principal curves for pseudotemporal ordering of single-cell RNA-seq data
 Version: 0.1
 Authors@R: person("Kieran", "Campbell", , "kieran.campbell@sjc.ox.ac.uk", role = c("aut", "cre"))
+Maintainer: Kieran Campbell <kieran.campbell@sjc.ox.ac.uk>
 Description: TBC
 Depends: R (>= 3.1.1)
 License: GPL-3
@@ -12,13 +13,10 @@ Imports:
   plyr,
   dplyr,
   mclust,
-  igraph,
-  Matrix,
-  gplots,
   reshape2,
   AER,
   lmtest,
-  magrittr,
-  splines
+  splines,
+  scater
 Suggests:
   NMF
