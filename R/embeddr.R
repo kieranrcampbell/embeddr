@@ -389,6 +389,9 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'  @param use_short_names Logical If \code{pData(sce)} contains a \code{gene_short_name}
 #'  column (such as in the \pkg{monocle} dataset \code{HSMM}) then the names in the resulting
 #'  plot will be the gene short names.
+#'  @param use_log_scale Logical If TRUE scale_y_log10 is added to plot
+#'  @param facet_wrap_scales Passed to the scales argument in \code{facet_wrap}. 
+#'  Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")
 #'  
 #'  @export
 #'  @import ggplot2
@@ -396,7 +399,9 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'  @importFrom Biobase fData
 #'
 #'  @return A \pkg{ggplot2} plot
-plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE) {
+plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, 
+                               use_short_names = TRUE, use_log_scale = FALSE,
+                               facet_wrap_scales = "fixed") {
   xp <- data.frame(t(exprs(sce)), check.names = FALSE) # now cell-by-gene
   if(use_short_names) names(xp) <- fData(sce)$gene_short_name
   
@@ -415,9 +420,11 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = 
   } else {
     plt <- ggplot(data=df_x, aes_string(x="pseudotime", y="counts"))
   }
+  if(use_log_scale) plt <- plt + scale_y_log10
 
   return( plt + geom_point(size=1.5) +
-    theme_bw() + geom_smooth(method='loess', color='firebrick') + facet_wrap(~ gene, nrow = nrow, ncol = ncol) +
+    theme_bw() + geom_smooth(method='loess', color='firebrick') + 
+      facet_wrap(~ gene, nrow = nrow, ncol = ncol, scales = facet_wrap_scales) +
     ylab('Normalised log10(FPKM)') )
 }
 

@@ -4,7 +4,8 @@
 \alias{plot_in_pseudotime}
 \title{Plot cells in pseudotime}
 \usage{
-plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE)
+plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE,
+  use_log_scale = FALSE, facet_wrap_scales = "fixed")
 }
 \arguments{
 \item{sce}{An object of class \code{SCESet}}
@@ -14,8 +15,13 @@ plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE)
 \item{ncol}{Number of columns of plots; passed to \code{facet_wrap}}
 
 \item{use_short_names}{Logical If \code{pData(sce)} contains a \code{gene_short_name}
- column (such as in the \pkg{monocle} dataset \code{HSMM}) then the names in the resulting
- plot will be the gene short names.}
+column (such as in the \pkg{monocle} dataset \code{HSMM}) then the names in the resulting
+plot will be the gene short names.}
+
+\item{use_log_scale}{Logical If TRUE scale_y_log10 is added to plot}
+
+\item{facet_wrap_scales}{Passed to the scales argument in \code{facet_wrap}.
+ Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")}
 }
 \value{
 A \pkg{ggplot2} plot
