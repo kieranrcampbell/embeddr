@@ -15,6 +15,7 @@ In this vignette we apply `embeddr` to the [Quake et al.](http://www.nature.com/
 In this example we have saved it to `~/oxford/embeddr/data/lsce.Rdata`, though this should be changed to where you save it.
 
 ```{r load-lib, message=FALSE, warning=FALSE}
+library(plyr)
 library(dplyr)
 library(devtools)
 library(data.table)
@@ -33,7 +34,8 @@ set.seed(123)
 
 ```{r load-data, cache=TRUE}
 ## load object 'lsce' 
-data_path <- '~/oxford/embeddr/data/lsce.Rdata'
+#data_path <- '~/oxford/embeddr/data/lsce.Rdata'
+data_path <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
 load(data_path)
 lsce@lowerDetectionLimit <- 0 # from paper
 ```
@@ -307,9 +309,9 @@ for(i in 1:n_cuts) {
   lines <- c(lines, genes_i)
 }
 
-fileConn <- file('~/oxford/embeddr/gene_classes.txt')
-writeLines(lines, fileConn)
-close(fileConn)
+# fileConn <- file('~/oxford/embeddr/gene_classes.txt')
+# writeLines(lines, fileConn)
+# close(fileConn)
 
 df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
 

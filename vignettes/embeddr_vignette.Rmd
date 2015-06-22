@@ -112,7 +112,7 @@ Next we take the log10 of the dataset (using a pseudocount of 1) and fit the emb
 
 ```{r embedding_highmag, cache=TRUE,  fig.width=7.5, fig.height=4.5}
 set.seed(123)
-sce <- fromCellDataSet(HSMM)
+sce <- fromCellDataSet(HSMM, logged = TRUE)
 sce@lowerDetectionLimit <- log10(0.1 + 1) ## monocle lower detection limit is 0.1
 exprs(sce) <- log10(exprs(sce) + 1) 
 
@@ -229,7 +229,8 @@ sce_npst$pseudotime <- NULL
 embeddings <- ldply(nns, function(i) {
   sce_map <- embeddr(sce_npst, genes_for_embedding = gene_indices, nn = i)
   sce_map <- fit_pseudotime(sce_map, clusters=c(1,3))
-  return(dplyr::select(pData(sce_map), component_1, component_2, trajectory_1, trajectory_2, pseudotime))
+  R <- dplyr::select(pData(sce_map), trajectory_1, trajectory_2, pseudotime)
+  R <- cbind(R, redDim(sce_map))
 })
 
 embeddings$nn <- rep(nns, each = dim(sce)[2])
@@ -256,8 +257,9 @@ embeddings <- ldply(1:ncv, function(i) {
   sce_reduced <- sce[gene_indices ,-inds[[i]] ]
   sce_reduced <- embeddr(sce_reduced)
   sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,3))
-  M_tmp <- dplyr::select(pData(sce_reduced), component_1, component_2, cluster, 
+  M_tmp <- dplyr::select(pData(sce_reduced), cluster, 
                          trajectory_1, trajectory_2, pseudotime)
+  M_tmp <- cbind(M_tmp, redDim(sce_reduced))
   M_tmp$fold <- i
   M_tmp
   })
@@ -279,8 +281,9 @@ embeddings_2 <- ldply(1:length(inds_2), function(i) {
   sce_reduced <- sce[gene_indices ,-inds_2[[i]] ]
   sce_reduced <- embeddr(sce_reduced, nn = 5)
   sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,3))
-  M_tmp <- dplyr::select(pData(sce_reduced), component_1, component_2, cluster,
+  M_tmp <- dplyr::select(pData(sce_reduced), cluster,
                          trajectory_1, trajectory_2, pseudotime)
+  M_tmp <- cbind(M_tmp, redDim(sce_reduced))
   M_tmp$fold <- i
   M_tmp
 })
@@ -380,7 +383,7 @@ short_names <- fData(HSMM)[cont_genes,]$gene_short_name
 y <- exprs(sce[cont_genes,])
 y <- t(y)
 y <- data.frame(y)
-M_y <- cbind(dplyr::select(pData(sce), component_1, component_2, cluster), y)
+M_y <- cbind(cluster = pData(sce)$cluster, redDim(sce), y)
 M_y <- dplyr::rename(M_y, Cluster = cluster)
 M_y_melted <- melt(M_y, id.vars=c('component_1','component_2','Cluster'), 
                    variable.name='gene', value.name='count')

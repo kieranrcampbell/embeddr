@@ -53,11 +53,15 @@ embeddr <- function(sce, genes_for_embedding = NULL,
   
   M <- laplacian_eigenmap(W, measure_type = measure_type, p = p)
   
-  ## 
-  pd <- pData(sce)
-  components_existing <- grep('component', names(pd))
-  if(length(components_existing > 0)) pd <- pd[,-components_existing]
-  phenoData(sce) <- new('AnnotatedDataFrame', data=cbind(pd, M))
+  ## code below represents pre- redDim(sce) 
+#   pd <- pData(sce)
+#   components_existing <- grep('component', names(pd))
+#   if(length(components_existing > 0)) pd <- pd[,-components_existing]
+#   phenoData(sce) <- new('AnnotatedDataFrame', data=cbind(pd, M))
+   
+  redDim(sce) <- as.matrix(M)
+
+  validObject( sce )
   return( sce )
 }
 
@@ -220,8 +224,8 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
-  component_1 <- component_2 <- NULL # satisfy R CMD check
-  M_xy <- select(pData(sce), component_1, component_2)
+  ## component_1 <- component_2 <- NULL # satisfy R CMD check
+  M_xy <- redDim(sce) # select(pData(sce), component_1, component_2)
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
@@ -287,7 +291,7 @@ cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
 fit_pseudotime <- function(sce, clusters = NULL, ...) {
   component_1 <- component_2 <- NULL # satisfy R CMD check
-  M <- select(pData(sce), component_1, component_2)
+  M <- as.data.frame(redDim(sce)) # select(pData(sce), component_1, component_2)
   n_cells <- dim(sce)[2]
   
   cells_in_cluster <- rep(TRUE, n_cells)
@@ -329,7 +333,7 @@ plot_embedding <- function(sce, color_by = 'cluster') {
   component_1 <- component_2 <- NULL
   trajectory_1 <- trajectory_2 <- NULL
   
-  M <- dplyr::select(pData(sce), component_1, component_2)
+  M <- as.data.frame(redDim(sce)) # dplyr::select(pData(sce), component_1, component_2)
   
 
 #   if('cluster' %in% names(pData(sce))) {
@@ -458,7 +462,8 @@ plot_graph <- function(sce) {
   component_1 <- component_2 <- NULL
   x <- y <- NULL
   
-  df <- select(pData(sce), x = component_1, y = component_2)
+  df <- dplyr::rename(as.data.frame(redDim(sce)), x = component_1, y = component_2)
+                                    #select(pData(sce), x = component_1, y = component_2)
   W <- cellDist(sce)
   
   diag(W) <- 0
