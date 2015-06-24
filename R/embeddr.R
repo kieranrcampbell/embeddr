@@ -544,13 +544,17 @@ fit_null_model <- function(sce, gene) {
 #' @param models A list of models returned by fit_pseudotime_models. If NULL (default), these will be
 #' re-calculated
 #' @param n_cores Number of cores to use when calculating the pseudotime models if `model` is NULL
+#'  @param use_log_scale Logical If TRUE scale_y_log10 is added to plot
+#'  @param facet_wrap_scales Passed to the scales argument in \code{facet_wrap}. 
+#'  Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")
 #' 
 #' @import ggplot2
 #' @importFrom reshape2 melt
 #' @export
 #' 
 #' @return An plot object from \code{ggplot}
-plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
+plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2, 
+                                  facet_wrap_scale = 'fixed',  use_log_scale = FALSE) {
   if(is.null(models)) models <- fit_pseudotime_models(sce, n_cores)
   # if(class(models) == 'list' && dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene in sce')
   
@@ -579,8 +583,10 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2) {
   plt <- ggplot(df)  + geom_line(aes_string(x = "pseudotime", y = "predicted"), color = 'red') + 
     theme_minimal() + geom_line(aes_string(x = "pseudotime", y = "min_expr"), color='grey', linetype=2) +
     scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red')) +
-    geom_point(aes_string(x = "pseudotime", y = "exprs")) + facet_wrap(~ gene) +
+    geom_point(aes_string(x = "pseudotime", y = "exprs")) + 
+    facet_wrap(~ gene, scales = facet_wrap_scale) +
     ylab('expression')
+  if(use_log_scale) plt <- plt + scale_y_log10()
   return( plt )
 }
 

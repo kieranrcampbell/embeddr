@@ -299,7 +299,6 @@ ggplot(embeddings_2) + geom_point(aes(x=component_1, y=component_2, color=cluste
 And see that the pseudotime fits are roughly constant:
 
 ```{r fit-cv-pst, cache=TRUE,  warning=FALSE, message=FALSE}
-##save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
 set.seed(45)
 folds <- createMultiFolds(1:ncol(sce), k = 2, times = 30)
 all_embeddings <- lapply(folds, function(ind) {
@@ -320,16 +319,47 @@ psts <- lapply(all_embeddings, function(sce_tmp) {
   sce_i <- all_embeddings[[i]]
   cells_in_i <- pData(sce_i)$cell_id
   sce_23_red <- sce_23[, pData(sce_23)$cell_id %in% cells_in_i]
-  abs(cor(psts[[i]], sce_23_red$pseudotime))
+  abs(cor(psts[[i]], sce_23_red$pseudotime, method="spearman"))
 })
-qplot(corrs) + theme_minimal() +
-  ggtitle('Correlation between sampled pseudotimes') +
+qplot(corrs, geom='density') + theme_bw() +
+  ggtitle('Pseudotime correlation for subsampled cells') +
   xlab('Correlation')
 
-print(paste('Median: ', median(corrs)))
-print(paste('SD: ', sd(corrs)))
+print(summary(corrs))
 ```
 
+### Subsampling the number of genes
+
+```{r subsample-genes, cache=TRUE,  warning=FALSE, message=FALSE}
+##save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
+folds <- createMultiFolds(1:length(gene_indices), k = 2, times = 30)
+all_embeddings <- lapply(folds, function(ind) {
+    #sce_tmp <- sce[gene_indices, ind]
+    sce_tmp <- embeddr(sce[gene_indices[ind],])#, genes_for_embedding = gene_indices)
+    sce_tmp
+  })
+
+#all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
+
+psts <- lapply(all_embeddings, function(sce_tmp) {
+  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,3)]
+  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,3))
+  sce_tmp_13$pseudotime
+})
+
+ corrs <- sapply(1:length(all_embeddings), function(i) {
+#   sce_i <- all_embeddings[[i]]
+#   cells_in_i <- pData(sce_i)$cell_id
+#   sce_23_red <- sce_23[, pData(sce_23)$cell_id %in% cells_in_i]
+#   abs(cor(psts[[i]], sce_23_red$pseudotime))
+   abs(cor(pseudotime(sce_23), psts[[i]], method="spearman"))
+})
+qplot(corrs, geom='density') + theme_bw() +
+  ggtitle('Pseudotime correlation for subsampled genes') +
+  xlab('Correlation')
+
+print(summary(corrs))
+```
 
 ## Unravelling the contaminated cells
 
@@ -550,6 +580,6 @@ for(i in 1:n_cuts) {
 
 ```
   
-  
+
   
   
