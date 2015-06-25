@@ -400,7 +400,7 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 #'
 #'  @return A \pkg{ggplot2} plot
 plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, 
-                               use_short_names = TRUE, use_log_scale = FALSE,
+                               use_short_names = FALSE, use_log_scale = FALSE,
                                facet_wrap_scales = "fixed") {
   xp <- data.frame(t(exprs(sce)), check.names = FALSE) # now cell-by-gene
   if(use_short_names) names(xp) <- fData(sce)$gene_short_name
@@ -420,7 +420,7 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL,
   } else {
     plt <- ggplot(data=df_x, aes_string(x="pseudotime", y="counts"))
   }
-  if(use_log_scale) plt <- plt + scale_y_log10
+  if(use_log_scale) plt <- plt + scale_y_log10()
 
   return( plt + geom_point(size=1.5) +
     theme_bw() + geom_smooth(method='loess', color='firebrick') + 
