@@ -159,7 +159,7 @@ lsce_sig <- lsce_bp_at1[sig_genes,]
 
 ```{r print-at1, fig.align='center', fig.height=6, fig.width=9, cache=TRUE}
 lsce_sig <- reverse_pseudotime(lsce_sig)
-plot_pseudotime_model(lsce_sig)
+plot_pseudotime_model(lsce_sig, facet_wrap_scale = 'free_y')
 ```
 
 Plot correlations of genes across pseudotime:
@@ -279,8 +279,7 @@ lsce_sig <- lsce_bp_at2[sig_genes,]
 ```
 
 ```{r plot-at2, fig.align='center', fig.height=9, fig.width=9, cache=TRUE}
-plot_pseudotime_model(lsce_sig)
-
+plot_pseudotime_model(lsce_sig, facet_wrap_scale = "free_y")
 ```
 
 Plot correlations of genes across pseudotime:
@@ -333,6 +332,8 @@ ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
   theme_bw() + ylab('Expression')
 
 ```
+
+
 
 ```{r at1-markers, cache=TRUE}
 markers1 <- c('Aqp5','Pdpn','Rtkn2','Ager','Emp2','Cav1','Clic5','Lmo7',
@@ -397,6 +398,10 @@ aheatmap(mm, Rowv = NA, Colv = NA,
 
 ## Compare to monocle
 
+```{r pull-out-sce}
+save(lsce_bp_at1, pseudotime_markers_at2, file="~/delete_me.Rdata")
+```
+
 ```{r compare-monocle, cache=TRUE}
 # lcds <- toCellDataSet(lsce)
 # lcds <- setOrderingFilter(lcds, het_genes)
@@ -405,18 +410,35 @@ aheatmap(mm, Rowv = NA, Colv = NA,
 # 
 # lcds2 <- reduceDimension(lcds2, use_irlba = FALSE)
 # lcds2 <- orderCells(lcds2, num_paths = 2)
-# plot_spanning_tree(lcds2, color_by = 'cluster')
+# plot_spanning_tree(lcds2, color_by = 'putative_cell_type')
 # 
-# cds_at_bp1 <- lcds2[,lcds$cluster %in% c('BP','AT1')]
-# cds_at_bp1 <- reduceDimension(cds_at_bp1, use_irlba=FALSE)
+# ## BP - AT1 transition
+# cds_at_bp1 <- lcds2[,lcds$putative_cell_type %in% c('BP','AT1')]
+# #cds_at_bp1 <- reduceDimension(cds_at_bp1, use_irlba=FALSE)
 # cds_at_bp1 <- orderCells(cds_at_bp1, num_paths = 1)
-# plot_spanning_tree(cds_at_bp1, color_by = 'cluster')
+# plot_spanning_tree(cds_at_bp1, color_by = 'putative_cell_type')
+# 
+# ## BP - AT2 transition
+# cds_at_bp2 <- lcds2[,lcds$putative_cell_type %in% c('BP','AT2')]
+# #cds_at_bp1 <- reduceDimension(cds_at_bp1, use_irlba=FALSE)
+# cds_at_bp2 <- orderCells(cds_at_bp2, num_paths = 1)
+# plot_spanning_tree(cds_at_bp2, color_by = 'putative_cell_type')
 # 
 # n_cells_expressed <- rowSums(exprs(cds_at_bp1) > 0)
 # keep_gene <- n_cells_expressed > 0.2 * dim(cds_at_bp1)[2]
 # cds <- cds_at_bp1[keep_gene,]
+# 
+# exprs(cds) <- exprs(cds) + 1
+# cds@lowerDetectionLimit <- log10(1)
+# # exprs(cds) <- exprs(cds) + 1
+# diff_test_res <- differentialGeneTest(cds)
+# 
+# n_cells_expressed <- rowSums(exprs(cds_at_bp2) > 0)
+# keep_gene <- n_cells_expressed > 0.2 * dim(cds_at_bp2)[2]
+# cds <- cds_at_bp2[keep_gene,]
 # exprs(cds) <- exprs(cds) + 1
 # diff_test_res <- differentialGeneTest(cds)
+
 ```
 
 
