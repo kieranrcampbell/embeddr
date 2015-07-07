@@ -101,7 +101,7 @@ weighted_graph <- function(x, kernel = c('nn','dist','heat'),
   if(metric == 'euclidean') {
     dm <- as.matrix(dist(t(x)))
   } else if(metric == 'correlation') {
-    dm <- cor(x)
+    dm <- cor(x, method='pearson')
   }
 
   W <- NULL
@@ -223,9 +223,8 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #' @importFrom Biobase phenoData<-
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
-cluster_embedding <- function(sce, k = NULL, method=c('kmeans','mm')) {
-  ## component_1 <- component_2 <- NULL # satisfy R CMD check
-  M_xy <- redDim(sce) # select(pData(sce), component_1, component_2)
+cluster_embedding <- function(sce, method=c('mm', 'kmeans'), k = NULL) {
+  M_xy <- redDim(sce) 
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
