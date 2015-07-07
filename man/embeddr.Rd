@@ -5,9 +5,10 @@
 \title{Laplacian eigenmaps embedding of single-cell RNA-seq data.}
 \usage{
 embeddr(sce, genes_for_embedding = NULL, kernel = c("nn", "dist", "heat"),
-  metric = c("correlation", "euclidean"), nn = round(log(ncol(sce))),
-  eps = NULL, t = NULL, symmetrize = c("mean", "ceil", "floor"),
-  measure_type = c("unorm", "norm"), p = 2)
+  metric = c("correlation", "euclidean", "cosine"),
+  nn = round(log(ncol(sce))), eps = NULL, t = NULL,
+  symmetrize = c("mean", "ceil", "floor"), measure_type = c("unorm",
+  "norm"), p = 2)
 }
 \arguments{
 \item{sce}{The SCESet object}

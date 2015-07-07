@@ -5,8 +5,9 @@
 \title{Construct a weighted graph adjacency matrix}
 \usage{
 weighted_graph(x, kernel = c("nn", "dist", "heat"),
-  metric = c("correlation", "euclidean"), nn = round(log(ncol(x))),
-  eps = NULL, t = NULL, symmetrize = c("mean", "ceil", "floor"))
+  metric = c("correlation", "euclidean", "cosine"),
+  nn = round(log(ncol(x))), eps = NULL, t = NULL, symmetrize = c("mean",
+  "ceil", "floor"))
 }
 \arguments{
 \item{x}{The feature-by-sample (e.g. genes are rows, cells are columns) data matrix}
