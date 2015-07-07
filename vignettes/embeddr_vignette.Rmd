@@ -33,13 +33,16 @@ library(embeddr)
 
 First we create the `SCESet` using the data from the `HSMMSingleCell` package:
 ```{r create-sce, message=FALSE, warning=FALSE, cache=TRUE}
-data(HSMM_expr_matrix)
-data(HSMM_gene_annotation)
-data(HSMM_sample_sheet)
+# data(HSMM_expr_matrix)
+# data(HSMM_gene_annotation)
+# data(HSMM_sample_sheet)
+# 
+# pd <- new('AnnotatedDataFrame', data = HSMM_sample_sheet)
+# fd <- new('AnnotatedDataFrame', data = HSMM_gene_annotation)
+# sce <- newSCESet(exprsData = HSMM_expr_matrix, phenoData = pd, featureData = fd)
 
-pd <- new('AnnotatedDataFrame', data = HSMM_sample_sheet)
-fd <- new('AnnotatedDataFrame', data = HSMM_gene_annotation)
-sce <- newSCESet(exprsData = HSMM_expr_matrix, phenoData = pd, featureData = fd)
+data(HSMM)
+sce <- fromCellDataSet(HSMM)
 
 ## add cell_id to HSMM to play nicely with dplyr
 phenoData(sce)$cell_id <- rownames(pData(sce))
@@ -466,6 +469,7 @@ sce_23_kept <- sce_23[keep_gene,]
 ## this is really handy as we can keep these around for predicting and plotting
 ## without having to compute them every time
 diff_gene_test <- pseudotime_test(sce_23_kept, n_cores = 1)
+save(sce_23_kept, diff_gene_test, file = "~/delete_me.Rdata")
 ```
 
 And plot p-vals:

@@ -4,7 +4,7 @@
 \alias{plot_in_pseudotime}
 \title{Plot cells in pseudotime}
 \usage{
-plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = TRUE,
+plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = FALSE,
   use_log_scale = FALSE, facet_wrap_scales = "fixed")
 }
 \arguments{

@@ -17,7 +17,9 @@ library(dplyr)
 After downloading the data, save it to the path defined by `data_path`:
 ```{r load-data}
 ## replace with your downloaded path:
-data_path <- "/net/isi-scratch/kieran/embeddr/data/nature13173-s4.txt" #"~/oxford/embeddr/data/nature13173-s4.txt"
+#data_path <- "/net/isi-scratch/kieran/embeddr/data/nature13173-s4.txt" 
+
+data_path <- "~/oxford/embeddr/data/nature13173-s4.txt"
 
 d <- fread(data_path, data.table=FALSE)
 
@@ -39,7 +41,7 @@ validObject(lsce)
 
 Now save to an R object for easy loading:
 ```{r save-sce}
-#save_file <- '~/oxford/embeddr/data/lsce.Rdata'
-save_file <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
+save_file <- '~/oxford/embeddr/data/lsce.Rdata'
+#save_file <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
 save(lsce, file=save_file, compress='gzip')
 ```
