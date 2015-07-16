@@ -28,21 +28,29 @@ library(knitr) ## for kable function
 library(goseq) ## for GO enrichment
 library(org.Hs.eg.db) ## for HG19 GO annotations
 library(embeddr)
+library(cowplot)
 ```
 
 
 First we create the `SCESet` using the data from the `HSMMSingleCell` package:
 ```{r create-sce, message=FALSE, warning=FALSE, cache=TRUE}
-# data(HSMM_expr_matrix)
-# data(HSMM_gene_annotation)
-# data(HSMM_sample_sheet)
-# 
-# pd <- new('AnnotatedDataFrame', data = HSMM_sample_sheet)
-# fd <- new('AnnotatedDataFrame', data = HSMM_gene_annotation)
-# sce <- newSCESet(exprsData = HSMM_expr_matrix, phenoData = pd, featureData = fd)
+## This is a bit fiddly since HSMMSingleCell changed format recently
+sce <- NULL
+hsmm_data_available <- data(package='HSMMSingleCell')$results[,3]
+if("HSMM" %in% hsmm_data_available) {
+  data(HSMM)
+  sce <- fromCellDataSet(HSMM, use_exprs_as = 'fpkm')
+} else if("HSMM_expr_matrix" %in% hsmm_data_available) {
+  data(HSMM_expr_matrix)
+  data(HSMM_gene_annotation)
+  data(HSMM_sample_sheet)
 
-data(HSMM)
-sce <- fromCellDataSet(HSMM)
+  pd <- new('AnnotatedDataFrame', data = HSMM_sample_sheet)
+  fd <- new('AnnotatedDataFrame', data = HSMM_gene_annotation)
+  sce <- newSCESet(fpkmData = HSMM_expr_matrix, phenoData = pd, featureData = fd)
+} else {
+  stop('No recognised data types in HSMMSingleCell')
+}
 
 ## add cell_id to HSMM to play nicely with dplyr
 phenoData(sce)$cell_id <- rownames(pData(sce))
@@ -52,22 +60,22 @@ First we go through cleaning the monocle dataset and selecting for marker genes 
 
 ```{r clean-monocle, cache=TRUE}
 ## convert back to monocle
-HSMM <- toCellDataSet(sce)
+HSMM <- toCellDataSet(sce, use_as_exprs = "fpkm")
 marker_genes <- row.names(subset(fData(HSMM),
                                  gene_short_name %in% c("MEF2C", "MEF2D", "MYF5", "ANPEP", "PDGFRA",
                   "MYOG", "TPM1", "TPM2", "MYH2", "MYH3", "NCAM1",
                   "CDK1", "CDK2", "CCNB1", "CCNB2", "CCND1", "CCNA")))
 x <- log(exprs(HSMM[marker_genes,]) + 1)
 x <- t(scale(t(x)))
-sce <- sce[marker_genes,]
-exprs(sce) <- x
+# sce <- sce[marker_genes,]
+# exprs(sce) <- x
 ```
 
 ### Laplacian eigenmaps
 The embeddr workflow creates the nearest neighbour graph then returns the laplacian eigenmap. We can do this using `embeddr::embeddr` with all options available, though `embeddr::weighted_graph` and `embeddr::laplacian_eigenmap` are available to perform each step by hand or with custom distance metrics. The default options specify a nearest neighbour graph with $k = round(log(n))$ neighbours for $n$ cells. Other options for creating the graph (such as distance measures and heat kernels) are also available. 
 
 ```{r create-graph, cache=TRUE}
-sce <- embeddr(sce)
+sce <- embeddr(sce, genes_for_embedding = marker_genes)
 plot_embedding(sce)
 ```
 
@@ -77,6 +85,7 @@ The function `embeddr::plot_embedding` can be used at any time on the appropriat
 HSMM <- setOrderingFilter(HSMM, marker_genes)
 HSMM <- reduceDimension(HSMM, use_irlba = F)
 HSMM <- orderCells(HSMM, num_paths=2, reverse=F)
+plot_spanning_tree(HSMM)
 phenoData(sce)$monocle_state <- pData(HSMM)$State
 plot_embedding(sce, color_by = 'monocle_state')
 ```
@@ -115,7 +124,7 @@ Next we take the log10 of the dataset (using a pseudocount of 1) and fit the emb
 
 ```{r embedding_highmag, cache=TRUE,  fig.width=7.5, fig.height=4.5}
 set.seed(123)
-sce <- fromCellDataSet(HSMM, useExpression = FALSE)
+#sce <- fromCellDataSet(HSMM, use_exprs_as = "fpkm")
 
 gene_indices <- match(names(which(genes_for_embedding)), featureNames(sce))
 sce <- embeddr(sce, genes_for_embedding = gene_indices)
@@ -136,7 +145,7 @@ plot_graph(sce)
 
 We can also cluster the embedding using kmeans and plot:
 ```{r clust_emb, cache=TRUE,  fig.width=7.5, fig.height=4.5}
-sce <- cluster_embedding(sce, 3)
+sce <- cluster_embedding(sce, k = 3)
 
 sce_tmp <- sce
 phenoData(sce_tmp)$cluster <- plyr::mapvalues(pData(sce_tmp)$cluster, from=c(3, 1, 2),
@@ -152,20 +161,18 @@ plot_embedding(sce_tmp)
 Finally, we want to check the method is different to a more primitive technique such as PCA alone:
 
 ```{r pca, cache=TRUE,  fig.width=6, fig.height=4.5}
-pca <- princomp(t(exprs(sce[gene_indices,])))
-df_pca <- data.frame(x1 = pca$scores[,1], x2 = pca$scores[,2], monocle_state = pData(sce)$long_state)
-ggplot(df_pca, aes(x=x2, y=x1, color=monocle_state)) + geom_point() + 
-  theme_bw() + scale_color_fivethirtyeight()
+plotPCA(sce[gene_indices,], colour_by = 'long_state')
 ```
 
 ### Pseudotime fitting
 In the `monocle` paper they show that groups 1 & 3 correspond to differentiating cells while group 2 is contamination. We can separate off groups 1 & 3, fit the pseudotime trajectories and plot:
 
 ```{r fit-pseudotime,  cache=TRUE}
-save(sce, file='~/delete_me.Rdata')
-sce_23 <- sce[, pData(sce)$cluster %in% c(1,3)]
+#save(sce, file='~/delete_me.Rdata')
+sce_23 <- sce[, pData(sce)$cluster %in% c(1,2)]
 sce_23 <- fit_pseudotime(sce_23)
 plot_embedding(sce_23)
+
 ```
 
 We can also compare our pseudotime with that of `monocle`:
@@ -209,9 +216,7 @@ Let's have a look at the MRF family of transcription factors:
 mrf <- c('MYOD1', 'MYF5', 'MYF6', 'MYOG') 
 mrf_ind <- sapply(mrf, match, fData(sce_23)$gene_short_name)
 
-# plot_in_pseudotime(sce_23[mrf_ind,])
-# 
-# plot_pseudotime_model(sce_23[mrf_ind,])
+plot_in_pseudotime(sce_23[mrf_ind,], use_short_names = TRUE)
 ```
 
 ## Robustness of the embedding
@@ -224,23 +229,15 @@ mrf_ind <- sapply(mrf, match, fData(sce_23)$gene_short_name)
 nns <- c(5,6,8,10,15,20)
 sce_npst <- sce
 sce_npst$pseudotime <- NULL
-embeddings <- ldply(nns, function(i) {
+embedding_plots <- lapply(nns, function(i) {
   sce_map <- embeddr(sce_npst, genes_for_embedding = gene_indices, nn = i)
-  sce_map <- fit_pseudotime(sce_map, clusters=c(1,3))
-  R <- dplyr::select(pData(sce_map), trajectory_1, trajectory_2, pseudotime)
-  R <- cbind(R, redDim(sce_map))
+  sce_map <- fit_pseudotime(sce_map, clusters=c(1, 2))
+#   R <- dplyr::select(pData(sce_map), trajectory_1, trajectory_2, pseudotime)
+#   R <- cbind(R, redDim(sce_map))
+  plot_embedding(sce_map)
 })
 
-embeddings$nn <- rep(nns, each = dim(sce)[2])
-embeddings$cluster  <- as.factor(rep(pData(sce)$cluster, times = length(nns)))
-
-embeddings <- dplyr::arrange(embeddings, nn, pseudotime)
-
-ggplot(data=embeddings) + geom_point(aes(x=component_1, y=component_2, color=cluster), alpha=0.75) +
-  theme_bw() + facet_wrap(~ nn) +
-  ggtitle('Overall shape for variety of nearest neighbours') + xlab('Component 1') +
-  ylab('Component 2') +
-  geom_path(aes(x=trajectory_1, y=trajectory_2), size = 1, linetype=2)
+plot_grid(plotlist = embedding_plots, labels = as.character(nns))
 ```
 
 ### Subsampling the number of cells
@@ -251,48 +248,30 @@ Subsample to check robustness:
 ncv <- 8
 inds <- createFolds(1:ncol(sce), ncv)
 
-embeddings <- ldply(1:ncv, function(i) {
+embedding_plots <- lapply(1:ncv, function(i) {
   sce_reduced <- sce[gene_indices ,-inds[[i]] ]
   sce_reduced <- embeddr(sce_reduced)
-  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,3))
-  M_tmp <- dplyr::select(pData(sce_reduced), cluster, 
-                         trajectory_1, trajectory_2, pseudotime)
-  M_tmp <- cbind(M_tmp, redDim(sce_reduced))
-  M_tmp$fold <- i
-  M_tmp
-  })
+  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,2))
+  return(plot_embedding(sce_reduced))
+})
 
-embeddings$cluster <- as.factor(embeddings$cluster)
-embeddings <- dplyr::arrange(embeddings, fold, pseudotime)
-ggplot(embeddings) + geom_point(aes(x=component_1, y=component_2, color=cluster), alpha=0.75) + 
- facet_wrap(~ fold) + theme_bw() +
-  ggtitle('Embedding for removing 1/8th of cells') + xlab('Component 1') +
-  ylab('Component 2') +
-  geom_path(aes(x=trajectory_1, y=trajectory_2), size = 1, linetype=2)
+plot_grid(plotlist = embedding_plots[1:4])
+plot_grid(plotlist = embedding_plots[5:8])
 ```
 
 Try the same with 1/2 of the data:
 ```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=7, warning=FALSE}
 inds_2 <- createMultiFolds(1:ncol(sce), k=2, times=6)
 
-embeddings_2 <- ldply(1:length(inds_2), function(i) {
+embeddings_2 <- lapply(1:length(inds_2), function(i) {
   sce_reduced <- sce[gene_indices ,-inds_2[[i]] ]
   sce_reduced <- embeddr(sce_reduced, nn = 5)
-  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,3))
-  M_tmp <- dplyr::select(pData(sce_reduced), cluster,
-                         trajectory_1, trajectory_2, pseudotime)
-  M_tmp <- cbind(M_tmp, redDim(sce_reduced))
-  M_tmp$fold <- i
-  M_tmp
+  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,2))
+  return(plot_embedding(sce_reduced))
 })
 
-embeddings_2$cluster <- as.factor(embeddings_2$cluster)
-embeddings_2 <- dplyr::arrange(embeddings_2, fold, pseudotime)
-ggplot(embeddings_2) + geom_point(aes(x=component_1, y=component_2, color=cluster), alpha=0.75) + 
- facet_wrap(~ fold) + theme_bw() +
-  ggtitle('Embedding for subsampling 50% of cells') + xlab('Component 1') +
-  ylab('Component 2') +
-  geom_path(aes(x=trajectory_1, y=trajectory_2), size = 1, linetype=2)
+plot_grid(plotlist = embeddings_2[1:6])
+plot_grid(plotlist = embeddings_2[7:12])
 ```
 And see that the pseudotime fits are roughly constant:
 
@@ -300,16 +279,13 @@ And see that the pseudotime fits are roughly constant:
 set.seed(45)
 folds <- createMultiFolds(1:ncol(sce), k = 2, times = 30)
 all_embeddings <- lapply(folds, function(ind) {
-    #sce_tmp <- sce[gene_indices, ind]
     sce_tmp <- embeddr(sce[gene_indices,ind])#, genes_for_embedding = gene_indices)
     sce_tmp
   })
 
-#all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
-
 psts <- lapply(all_embeddings, function(sce_tmp) {
-  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,3)]
-  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,3))
+  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,2)]
+  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,2))
   sce_tmp_13$pseudotime
 })
 
@@ -340,8 +316,8 @@ all_embeddings <- lapply(folds, function(ind) {
 #all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
 
 psts <- lapply(all_embeddings, function(sce_tmp) {
-  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,3)]
-  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,3))
+  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,2)]
+  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,2))
   sce_tmp_13$pseudotime
 })
 
@@ -459,7 +435,7 @@ Now try all of them:
 n_cells_expressed <- rowSums(is_exprs(sce_23))
 keep_gene <- n_cells_expressed > 0.2 * dim(sce_23)[2]
 sce_23_kept <- sce_23[keep_gene,]
-save(sce = sce_23_kept, file = "~/oxford/embeddr/data/sce_pst.Rdata")
+# save(sce = sce_23_kept, file = "~/oxford/embeddr/data/sce_pst.Rdata")
 
 ## can optionally use pre-computed models in the pseudotime test function. 
 ## this is really handy as we can keep these around for predicting and plotting
@@ -498,7 +474,7 @@ plot(hc, labels=FALSE)
 
 Now look at conserved modules:
 ```{r plot-modules, fig.width=6, fig.height=4, cache=TRUE, message=FALSE}
-n_cuts <- 6
+n_cuts <- 4
 gene_classes <- cutree(hc, n_cuts)
       
 df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
@@ -529,18 +505,6 @@ genes_per_class <- sapply(1:n_cuts, function(i) sum(gene_classes == i))
 df_gpc <- data.frame(Class=1:n_cuts, 'Number in class' = genes_per_class)
 print(kable(df_gpc, caption='Genes per class'))
 
-
-# names(gene_classes) <- sapply(as.character(names(gene_classes)), function(gn) strsplit(gn, '[.]')[[1]][1])
-# 
-# base_name <- "/net/isi-scratch/kieran/embeddr/embeddr/data/"
-# for(i in 1:n_cuts) {
-#   filename <- paste0(base_name, 'genes_', i,'.txt')
-#   conn <- file(filename)
-#   gn <- names(which(gene_classes == i))
-# 
-#   writeLines(gn, conn)
-#   close(conn)
-# }
 ```
 
 Now look at enriched GO terms for each class:
@@ -568,6 +532,7 @@ enriched_terms <- apply(genes_per_class, 2, function(gene_set) {
   })
 
 reduced <- lapply(enriched_terms, head, 6)
+
 ```
 
 Now print the terms:
@@ -576,7 +541,6 @@ Now print the terms:
 for(i in 1:n_cuts) {
   print(kable(reduced[[i]], caption = paste('GO terms for cluster', i)))
 }
-
 ```
   
 

@@ -374,23 +374,25 @@ plot_embedding <- function(sce, color_by = 'cluster') {
       mapping_str <- color_by
     }
     plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
-                                       color=mapping_str), size = 4)
-    if(is.numeric(pData(sce)[[color_by]]) && any(pData(sce)[[color_by]] %% 1 != 0)) {
-      plt <- plt + scale_color_continuous(name = color_by)
+                                       fill = mapping_str), color = 'gray20',
+                            alpha = 0.65, size = 3.5, shape = 21)
+    
+    if(is.numeric(pData(sce)[[color_by]]) && all(pData(sce)[[color_by]] %% 1 != 0)) {
+      plt <- plt + scale_fill_continuous(name = color_by)
     } else {
-      plt <- plt + scale_color_discrete(name = color_by)
+      plt <- plt + scale_fill_discrete(name = color_by)
     }
 
   } else {
     warning(paste('color_by string',color_by,'not found in pData(SCESet)'))
-    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"), size = 4)
+    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"), alpha = 0.65, size = 4)
   }
 
   if("pseudotime" %in% names(M)) {
     ## curve has been fit so plot all
     plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
                            data=M, color='black',
-                           size = 1, alpha = 0.7, linetype=2)
+                           size = 1.5, alpha = 0.8, linetype=2)
   }
   plt <- plt + xlab('Component 1') + ylab('Component 2')
 
