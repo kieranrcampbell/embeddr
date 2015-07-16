@@ -45,6 +45,8 @@ embeddr <- function(sce, genes_for_embedding = NULL,
                     symmetrize = c('mean','ceil','floor'),
                     measure_type = c('unorm','norm'), p = 2) {
 
+  sce <- remove_pseudotime(sce)
+
   if(is.null(genes_for_embedding)) genes_for_embedding <- 1:dim(sce)[1]
   W <- weighted_graph(exprs(sce[genes_for_embedding,]), kernel = kernel, metric = metric,
                       nn = nn, eps = eps, t = t, symmetrize = symmetrize)
@@ -97,6 +99,9 @@ weighted_graph <- function(x, kernel = c('nn','dist','heat'),
   kernel <- match.arg(kernel)
   symmetrize <- match.arg(symmetrize)
   metric <- match.arg(metric)
+
+  if(kernel == 'heat' && is.null(t)) stop('Please specify t for using heat kernel')
+  if(kernel == 'dist' && is.null(eps)) stop('Please specify eps for using distance kernel')
 
   ## compute distance matrix
   dm <- NULL
@@ -189,6 +194,14 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2) {
   M <- data.frame(M)
 
   return( M )
+}
+
+#' removes the pseudotime and low dimensional trajectory
+remove_pseudotime <- function(sce) {
+  sce$pseudotime <- NULL
+  sce$trajectory_1 <- NULL
+  sce$trajectory_2 <- NULL
+  return( sce )
 }
 
 #' Plot the degree distribution of the weight matrix
@@ -339,6 +352,7 @@ plot_embedding <- function(sce, color_by = 'cluster') {
 
   M <- as.data.frame(redDim(sce)) # dplyr::select(pData(sce), component_1, component_2)
 
+  if(ncol(M) < 2) stop('Please call embeddr on SCESet first')
 
 #   if('cluster' %in% names(pData(sce))) {
 #     M <- cbind(M, select(pData(sce), cluster))
@@ -353,24 +367,24 @@ plot_embedding <- function(sce, color_by = 'cluster') {
     M <- arrange(M, pseudotime)
   }
 
-  plt <- ggplot(data=M) + theme_bw()
+  plt <- ggplot(data=M)
   if(color_by %in% names(M)) {
-    if(color_by == 'pseudotime') {
-      mapping_str <- color_by
+    if(color_by == 'cluster') {
+      mapping_str <- paste0("as.factor(", color_by, ")")
     } else {
-      mapping_str <- paste("as.factor(", color_by, ")")
+      mapping_str <- color_by
     }
     plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
-                                       color=mapping_str))
-    if(color_by == 'pseudotime') {
+                                       color=mapping_str), size = 4)
+    if(is.numeric(pData(sce)[[color_by]]) && any(pData(sce)[[color_by]] %% 1 != 0)) {
       plt <- plt + scale_color_continuous(name = color_by)
     } else {
       plt <- plt + scale_color_discrete(name = color_by)
     }
 
-
   } else {
-    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"))
+    warning(paste('color_by string',color_by,'not found in pData(SCESet)'))
+    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"), size = 4)
   }
 
   if("pseudotime" %in% names(M)) {
@@ -380,6 +394,12 @@ plot_embedding <- function(sce, color_by = 'cluster') {
                            size = 1, alpha = 0.7, linetype=2)
   }
   plt <- plt + xlab('Component 1') + ylab('Component 2')
+
+  if ( library(cowplot, logical.return = TRUE) ) {
+    plt <- plt + cowplot::theme_cowplot()
+  } else {
+    plt <- plt + theme_bw()
+  }
   return( plt )
 }
 
@@ -495,7 +515,8 @@ plot_graph <- function(sce) {
     geom_segment(data=from_to, aes_string(x="x_from", xend="x_to",
                                           y="y_from", yend="y_to", color="connect"),
                  alpha=0.5, linetype=1) +
-        theme_minimal() + scale_color_manual(values = cols) + geom_point(data=df, aes(x=x,y=y))
+        theme_minimal() + scale_color_manual(values = cols) +
+    geom_point(data=df, aes(x=x,y=y), alpha = 0.5)
   plt + xlab('x') + ylab('y')
   plt
 }
@@ -548,9 +569,10 @@ fit_null_model <- function(sce, gene) {
 #' @param models A list of models returned by fit_pseudotime_models. If NULL (default), these will be
 #' re-calculated
 #' @param n_cores Number of cores to use when calculating the pseudotime models if `model` is NULL
-#'  @param use_log_scale Logical If TRUE scale_y_log10 is added to plot
-#'  @param facet_wrap_scales Passed to the scales argument in \code{facet_wrap}.
+#' @param use_log_scale Logical If TRUE scale_y_log10 is added to plot
+#' @param facet_wrap_scale Passed to the scales argument in \code{facet_wrap}.
 #'  Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")
+#'  @param color_by The variable in pData(sce) by which to colour the points
 #'
 #' @import ggplot2
 #' @importFrom reshape2 melt
@@ -558,7 +580,8 @@ fit_null_model <- function(sce, gene) {
 #'
 #' @return An plot object from \code{ggplot}
 plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2,
-                                  facet_wrap_scale = 'fixed',  use_log_scale = FALSE) {
+                                  facet_wrap_scale = 'fixed',  use_log_scale = FALSE,
+                                  color_by = NULL) {
   if(is.null(models)) models <- fit_pseudotime_models(sce, n_cores)
   # if(class(models) == 'list' && dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene in sce')
 
@@ -573,11 +596,11 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2,
   y <- data.frame(t(exprs(sce)))
   names(y) <- gene_names
 
-  y$pseudotime <- pData(sce)$pseudotime
+  y$pseudotime <- pseudotime(sce)
   y_melted <- melt(y, id.vars='pseudotime', value.name='exprs', variable.name='gene')
   pe <- data.frame(predicted_expression(sce, models))
   names(pe) <- gene_names
-  pe$pseudotime <- pData(sce)$pseudotime
+  pe$pseudotime <- pseudotime(sce)
   pe_melted <- melt(pe, id.vars='pseudotime', value.name='predicted', variable.name='gene')
 
   df <- dplyr::full_join(y_melted, pe_melted, by=c('pseudotime','gene'))
@@ -587,9 +610,17 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2,
   plt <- ggplot(df)  + geom_line(aes_string(x = "pseudotime", y = "predicted"), color = 'red') +
     theme_minimal() + geom_line(aes_string(x = "pseudotime", y = "min_expr"), color='grey', linetype=2) +
     scale_color_manual('', values=c('Min expr' = 'grey', 'Predicted'='red')) +
-    geom_point(aes_string(x = "pseudotime", y = "exprs")) +
     facet_wrap(~ gene, scales = facet_wrap_scale) +
     ylab('expression')
+  if(is.null(color_by)) {
+    plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs"))
+  } else {
+    if(color_by %in% names(pData(sce))) {
+      plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs", color = color_by))
+    } else {
+      plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs"))
+    }
+  }
   if(use_log_scale) plt <- plt + scale_y_log10()
   return( plt )
 }
@@ -738,10 +769,25 @@ predicted_expression <- function(sce, models = NULL, n_cores = 2) {
 #' @import ggplot2
 #' @export
 #' @return A `ggplot` object
-plot_pseudotime_density <- function(sce, reverse = FALSE) {
+plot_pseudotime_density <- function(sce, color_by = NULL, reverse = FALSE) {
   if(reverse) sce <- reverse_pseudotime(sce)
-  ggplot(pData(sce)) + geom_density(aes_string(x = "pseudotime", fill = "cluster")) +
-    theme_bw() + xlab('Pseudotime') + ylab('Cellular density')
+
+  if(!('pseudotime' %in% names(pData(sce)))) stop('Fit pseudotime before calling plot_pseudotime_density')
+
+  plt <- ggplot(pData(sce))
+  if(!is.null(color_by)) {
+    if(color_by %in% names(pData(sce))) {
+    plt <- plt + geom_density(aes_string(x = "pseudotime", fill = color_by))
+   } else {
+    warning(paste('Variable',color_by,'not found in names(pData(sce))'))
+    plt <- plt + geom_density(aes_string(x = "pseudotime"))
+   }
+    }
+  else {
+     plt <- plt + geom_density(aes_string(x = "pseudotime"))
+  }
+  plt <- plt + theme_bw() + xlab('Pseudotime') + ylab('Cellular density')
+  return( plt )
 }
 
 #' Plot metrics in pseudotime
@@ -813,3 +859,31 @@ pseudotime <- function(sce) {
   return(pData(sce)$pseudotime)
 }
 
+#' Log the expression of a given SCESet
+#'
+#' @param sce An object of class SCESet
+#' @param base The base of the logarithm
+#' @param pseudocount The count to add to the expression to avoid taking
+#' the logarithms of negative numbers. If NULL this will
+#' be worked out automatically.
+#'
+#' @importFrom Biobase exprs<-
+#'
+#' @export
+#' @return An SCESet with the expression logged
+log_expression <- function(sce, base = 10, pseudocount = NULL) {
+  if(is.null(pseudocount)) {
+      min_exprs <- min(as.vector(exprs(sce)))
+      if(min_exprs == 0) {
+        pseudocount <-  1
+      } else if(min_exprs < 0) {
+        stop('Expression contains negative values')
+      } else {
+        pseudocount <- 0
+      }
+  }
+  exprs(sce) <- log(exprs(sce) + pseudocount, base = base)
+  sce@lowerDetectionLimit <- log(sce@lowerDetectionLimit + pseudocount, base = base)
+  sce@logged <- TRUE
+  return( sce )
+}
