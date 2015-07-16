@@ -5,7 +5,7 @@
 \title{Plot the cells in the embedding}
 \usage{
 plot_embedding(sce, color_by = "cluster", plot_genes = NULL,
-  use_short_names = TRUE, plot_pseudotime = TRUE)
+  use_short_names = FALSE, plot_pseudotime = TRUE)
 }
 \arguments{
 \item{sce}{The SCESet object}

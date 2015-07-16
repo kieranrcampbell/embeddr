@@ -197,6 +197,9 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2) {
 }
 
 #' removes the pseudotime and low dimensional trajectory
+#' @param sce The \code{SCESet}
+#' 
+#' @return An \code{SCESet} with the pseudotime & trajectory removed
 remove_pseudotime <- function(sce) {
   sce$pseudotime <- NULL
   sce$trajectory_1 <- NULL
@@ -809,6 +812,7 @@ predicted_expression <- function(sce, models = NULL, n_cores = 2) {
 #'
 #' @param sce An object of class SCESet
 #' @param reverse Logical If true the pseudotime will be reversed.
+#' @param color_by The variable (in \code{pData(sce)}) by which to colour the density plot.
 #'
 #' @import ggplot2
 #' @export

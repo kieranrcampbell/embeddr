@@ -6,6 +6,12 @@
 \usage{
 remove_pseudotime(sce)
 }
+\arguments{
+\item{sce}{The \code{SCESet}}
+}
+\value{
+An \code{SCESet} with the pseudotime & trajectory removed
+}
 \description{
 removes the pseudotime and low dimensional trajectory
 }

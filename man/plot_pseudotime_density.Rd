@@ -9,6 +9,8 @@ plot_pseudotime_density(sce, color_by = NULL, reverse = FALSE)
 \arguments{
 \item{sce}{An object of class SCESet}
 
+\item{color_by}{The variable (in \code{pData(sce)}) by which to colour the density plot.}
+
 \item{reverse}{Logical If true the pseudotime will be reversed.}
 }
 \value{

@@ -20,7 +20,8 @@ Imports:
   scater,
   survival,
   Biobase,
-  parallel
+  parallel,
+  lsa
 Suggests:
   NMF,
   monocle,
