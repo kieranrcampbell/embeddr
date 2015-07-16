@@ -17,9 +17,9 @@ library(dplyr)
 After downloading the data, save it to the path defined by `data_path`:
 ```{r load-data}
 ## replace with your downloaded path:
-#data_path <- "/net/isi-scratch/kieran/embeddr/data/nature13173-s4.txt" 
+data_path <- "/net/isi-scratch/kieran/embeddr/data/nature13173-s4.txt" 
 
-data_path <- "~/oxford/embeddr/data/nature13173-s4.txt"
+#data_path <- "~/oxford/embeddr/data/nature13173-s4.txt"
 
 d <- fread(data_path, data.table=FALSE)
 
@@ -34,14 +34,14 @@ d_numeric <- select(d, -cell_name, -time_point, -sample, -putative_cell_type)
 d_pheno <- select(d, cell_name, time_point, sample, putative_cell_type)
 
 pd <- new('AnnotatedDataFrame', data=d_pheno)
-lsce <- newSCESet(exprsData = t(d_numeric), phenoData = pd)
+lsce <- newSCESet(exprsData = t(d_numeric), phenoData = pd) # this is log2 data so use exprs
 
 validObject(lsce)
 ```
 
 Now save to an R object for easy loading:
 ```{r save-sce}
-save_file <- '~/oxford/embeddr/data/lsce.Rdata'
-#save_file <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
+#save_file <- '~/oxford/embeddr/data/lsce.Rdata'
+save_file <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
 save(lsce, file=save_file, compress='gzip')
 ```

@@ -5,7 +5,7 @@
 \title{Plot the fit in pseudotime}
 \usage{
 plot_pseudotime_model(sce, models = NULL, n_cores = 2,
-  facet_wrap_scale = "fixed", use_log_scale = FALSE)
+  facet_wrap_scale = "fixed", use_log_scale = FALSE, color_by = NULL)
 }
 \arguments{
 \item{sce}{An object of class SCE set}
@@ -15,10 +15,12 @@ re-calculated}
 
 \item{n_cores}{Number of cores to use when calculating the pseudotime models if `model` is NULL}
 
+\item{facet_wrap_scale}{Passed to the scales argument in \code{facet_wrap}.
+Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")}
+
 \item{use_log_scale}{Logical If TRUE scale_y_log10 is added to plot}
 
-\item{facet_wrap_scales}{Passed to the scales argument in \code{facet_wrap}.
- Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")}
+\item{color_by}{The variable in pData(sce) by which to colour the points}
 }
 \value{
 An plot object from \code{ggplot}

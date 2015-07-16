@@ -337,6 +337,13 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #'
 #' @param sce The SCESet object
 #' @param color_by The variable to color the embedding with (defaults to cluster)
+#' @param plot_genes A vector of gene names or indices (anything with which to subset the SCESet) for
+#' plotting gene expression as a size in the reduced space. This will facet wrap, so an individual plot
+#' for each gene (don't choose too many).
+#' @param use_short_names If fData(sce)$gene_short_names is defined and this is true then those are used
+#' on the plot
+#' @param plot_pseudotime If TRUE (default) the pseudotime curve (principal curve) is shown on the plot. If 
+#' pData(sce)$pseudotime is null then this is ignored
 #'
 #' @import ggplot2
 #' @importFrom dplyr select
@@ -344,38 +351,65 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #' @export
 #'
 #' @return A \pkg{ggplot2} plot
-plot_embedding <- function(sce, color_by = 'cluster') {
+plot_embedding <- function(sce, color_by = 'cluster', 
+                           plot_genes = NULL, use_short_names = FALSE,
+                           plot_pseudotime = TRUE) {
   ## satisfy R CMD check
   component_1 <- component_2 <- NULL
   trajectory_1 <- trajectory_2 <- NULL
+  plot_names <- NULL
 
   M <- as.data.frame(redDim(sce)) # dplyr::select(pData(sce), component_1, component_2)
 
   if(ncol(M) < 2) stop('Please call embeddr on SCESet first')
 
-#   if('cluster' %in% names(pData(sce))) {
-#     M <- cbind(M, select(pData(sce), cluster))
-#     color_by <- 'pseudotime'
-#   }
+  ## are we colouring by a factor?
   if(color_by %in% names(pData(sce))) {
     col <- match(color_by, names(pData(sce)))
     M <- cbind(M, dplyr::select(pData(sce), col))
   }
-  if('pseudotime' %in% names(pData(sce))) {
+  
+  ## are we plotting pseudotime?
+  if(('pseudotime' %in% names(pData(sce))) && plot_pseudotime) {
     M <- cbind(M, select(pData(sce), pseudotime, trajectory_1, trajectory_2))
-    M <- arrange(M, pseudotime)
   }
+  
+  ## are we sizing by gene expression?
+  if(!is.null(plot_genes)) {
+    if(is.character(plot_genes)) { 
+      plot_names <- plot_genes
+    } else {
+      plot_names <- featureNames(sce)[plot_genes]
+    }
+    y <- exprs(sce[plot_genes,])
+    y <- t(y)
+    y <- data.frame(y)
+    M <- cbind(M, y)
+    M <- melt(M, id.vars=setdiff(names(M), plot_names), 
+                       variable.name='gene', value.name='count')
+   if(use_short_names) M$gene <- mapvalues(M$gene, from = featureNames(sce), to = fData(sce)$gene_short_name)
+  }
+  
+  if(('pseudotime' %in% names(pData(sce))) && plot_pseudotime) M <- arrange(M, pseudotime)
+  
 
   plt <- ggplot(data=M)
-  if(color_by %in% names(M)) {
+  
+  if(color_by %in% names(M)) { # colouring by something
     if(color_by == 'cluster') {
       mapping_str <- paste0("as.factor(", color_by, ")")
     } else {
       mapping_str <- color_by
     }
-    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
-                                       fill = mapping_str), color = 'gray20',
-                            alpha = 0.65, size = 3.5, shape = 21)
+    if(is.null(plot_genes)) {
+      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
+                                         fill = mapping_str), color = 'gray20',
+                              alpha = 0.65, size = 3.5, shape = 21)
+    } else {
+      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
+                                         fill = mapping_str, size = "count"), color = 'gray20',
+                              alpha = 0.65, shape = 21)
+    }
     
     if(is.numeric(pData(sce)[[color_by]]) && all(pData(sce)[[color_by]] %% 1 != 0)) {
       plt <- plt + scale_fill_continuous(name = color_by)
@@ -383,12 +417,18 @@ plot_embedding <- function(sce, color_by = 'cluster') {
       plt <- plt + scale_fill_discrete(name = color_by)
     }
 
-  } else {
+  } else { # not colouring by something
     warning(paste('color_by string',color_by,'not found in pData(SCESet)'))
-    plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"), alpha = 0.65, size = 4)
+    if(is.null(plot_genes)) {
+      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"), 
+                              alpha = 0.65, size = 3.5)
+    } else {
+      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2", size = "count"), 
+                              alpha = 0.65)
+    }
   }
 
-  if("pseudotime" %in% names(M)) {
+  if(("pseudotime" %in% names(M)) && plot_pseudotime) {
     ## curve has been fit so plot all
     plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
                            data=M, color='black',
@@ -401,6 +441,9 @@ plot_embedding <- function(sce, color_by = 'cluster') {
   } else {
     plt <- plt + theme_bw()
   }
+  
+  if(!is.null(plot_genes)) plt <- plt + facet_wrap( ~ gene )
+  
   return( plt )
 }
 

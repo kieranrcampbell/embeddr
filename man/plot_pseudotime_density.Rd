@@ -4,7 +4,7 @@
 \alias{plot_pseudotime_density}
 \title{Plot density of cells in pseudotime}
 \usage{
-plot_pseudotime_density(sce, reverse = FALSE)
+plot_pseudotime_density(sce, color_by = NULL, reverse = FALSE)
 }
 \arguments{
 \item{sce}{An object of class SCESet}

@@ -78,6 +78,12 @@ plot_embedding(lsce, color_by = 'putative_cell_type')
 plot_graph(lsce)
 ```
 
+
+```{r plot-markers-in-space, cache=TRUE, message= FALSE, warning=FALSE}
+plot_embedding(lsce, color_by = 'putative_cell_type', 
+               plot_genes = c('Sox9','Cited2','Hes1','Fzd2'))
+```
+
 It is obvious we have two very separate trajectories; let's consider the pseudotemporal ordering of one only:
 
 ```{r cluster-plot, cache=TRUE, fig.align='center', message=FALSE}

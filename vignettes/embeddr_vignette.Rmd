@@ -380,22 +380,10 @@ ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), 
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
-```{r markers-in-space, cache=T, fig.width=9, fig.height=8}
+```{r markers-in-space, cache=T, fig.width=9, fig.height=8, message = FALSE}
 cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("CDK1", "MYOG", "PDGFRA", 
                                                                     "SPHK1", "MYF5", "NCAM1")))
-short_names <- fData(HSMM)[cont_genes,]$gene_short_name
-y <- exprs(sce[cont_genes,])
-y <- t(y)
-y <- data.frame(y)
-M_y <- cbind(cluster = pData(sce)$cluster, redDim(sce), y)
-M_y <- dplyr::rename(M_y, Cluster = cluster)
-M_y_melted <- melt(M_y, id.vars=c('component_1','component_2','Cluster'), 
-                   variable.name='gene', value.name='count')
-M_y_melted$gene <- mapvalues(M_y_melted$gene, from = cont_genes, to = short_names)
-ggplot(M_y_melted, aes(x=component_1, y=component_2, size=count, color=factor(Cluster))) + 
-  geom_point(alpha=0.6) + facet_wrap(~ gene) + theme_bw() +
-  scale_color_fivethirtyeight(name='Cluster') + scale_size_continuous(name='log10(FPKM)')  +
-  xlab('Component 1') + ylab('Component 2')
+plot_embedding(sce, plot_genes = cont_genes, plot_pseudotime = FALSE)
 ```
 
 Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:

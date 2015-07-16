@@ -4,12 +4,23 @@
 \alias{plot_embedding}
 \title{Plot the cells in the embedding}
 \usage{
-plot_embedding(sce, color_by = "cluster")
+plot_embedding(sce, color_by = "cluster", plot_genes = NULL,
+  use_short_names = TRUE, plot_pseudotime = TRUE)
 }
 \arguments{
 \item{sce}{The SCESet object}
 
 \item{color_by}{The variable to color the embedding with (defaults to cluster)}
+
+\item{plot_genes}{A vector of gene names or indices (anything with which to subset the SCESet) for
+plotting gene expression as a size in the reduced space. This will facet wrap, so an individual plot
+for each gene (don't choose too many).}
+
+\item{use_short_names}{If fData(sce)$gene_short_names is defined and this is true then those are used
+on the plot}
+
+\item{plot_pseudotime}{If TRUE (default) the pseudotime curve (principal curve) is shown on the plot. If
+pData(sce)$pseudotime is null then this is ignored}
 }
 \value{
 A \pkg{ggplot2} plot
