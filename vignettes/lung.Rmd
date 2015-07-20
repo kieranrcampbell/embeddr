@@ -101,7 +101,7 @@ phenoData(lsce_13_tmp)$cluster <- plyr::mapvalues(pData(lsce_13_tmp)$cluster,
                                                  to=c('AT1','BP','AT2'))
 
 plot_embedding(lsce_13_tmp)
-plot_pseudotime_density(lsce_13_tmp)
+plot_pseudotime_density(lsce_13_tmp, color_by = 'cluster')
 ```
 
 We can also plot genes in pseudotime:

@@ -7,7 +7,7 @@ Description: Embeddr provides a set of methods for manifold learning on single-c
 Depends: R (>= 3.1.1)
 License: GPL-3
 LazyData: true
-Imports:
+Imports: 
   ggplot2,
   princurve,
   plyr,
@@ -21,8 +21,11 @@ Imports:
   survival,
   Biobase,
   parallel,
-  lsa
-Suggests:
+  lsa,
+  igraph
+Suggests: 
   NMF,
   monocle,
-  HSMMSingleCell
+  HSMMSingleCell,
+    knitr
+VignetteBuilder: knitr

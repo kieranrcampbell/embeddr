@@ -53,15 +53,10 @@ embeddr <- function(sce, genes_for_embedding = NULL,
 
   cellDist(sce) <- W
 
-  M <- laplacian_eigenmap(W, measure_type = measure_type, p = p)
+  LE <- laplacian_eigenmap(W, measure_type = measure_type, p = p)
 
-  ## code below represents pre- redDim(sce)
-#   pd <- pData(sce)
-#   components_existing <- grep('component', names(pd))
-#   if(length(components_existing > 0)) pd <- pd[,-components_existing]
-#   phenoData(sce) <- new('AnnotatedDataFrame', data=cbind(pd, M))
-
-  redDim(sce) <- as.matrix(M)
+  redDim(sce) <- as.matrix(LE$embedding)
+  pData(sce)$connected_component <- LE$connected_component
 
   validObject( sce )
   return( sce )
@@ -159,11 +154,13 @@ weighted_graph <- function(x, kernel = c('nn','dist','heat'),
 #' @param W The weighted graph adjacency matrix
 #' @param measure_type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
 #' @param p Dimension of the embedded space, default is 2
+#' 
+#' @import igraph
 #'
 #' @export
 #'
 #' @return The p-dimensional embedding
-laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2) {
+laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2, eig_tol = 1e-10) {
   measure_type <- match.arg(measure_type)
   if(nrow(W) != ncol(W)) {
     print('Input weight matrix W must be symmetric')
@@ -182,18 +179,28 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2) {
     M <- diag(Ds) * eig$vectors[,(l-1):(l-p)]
   }
   if(measure_type == 'unorm') {
-    L  <- diag(rowSums(W)) - W
     eig <- eigen(L, symmetric=T) # values ordered in decreasing order
-    l <- nrow(L)
     M <- eig$vectors[,(l-1):(l-p)]
   }
-
-  if(sum(eig$values == 0) > 1) warning(paste('More than one non-zero eigenvalue - disjoint clusters. Multiplicity: ', sum(eig$values == 0)))
+  
+  ## deal with multiple connected components
+  cc <- NULL
+  
+  if(sum(eig$values < eig_tol) > 1) {
+    warning(paste('More than one non-zero eigenvalue - disjoint clusters.'))
+    g <- graph.adjency(ceiling(W), mode = 'undirected')
+    if(no.clusters(g) != sum(eig$values < eig_tol)) {
+      stop("Number of connected components doesn't match number of eigenvalues of the laplacian identified as zero. Consider changing eig_tol")
+    }
+    cc <- clusters(g)$membership
+  } else {
+    cc <- rep(1, l)  
+  }
 
   colnames(M) <- paste0('component_', 1:p)
   M <- data.frame(M)
 
-  return( M )
+  return( list(embedding = M, connected_components = cc) )
 }
 
 #' removes the pseudotime and low dimensional trajectory
