@@ -154,12 +154,21 @@ weighted_graph <- function(x, kernel = c('nn','dist','heat'),
 #' @param W The weighted graph adjacency matrix
 #' @param measure_type Type of laplacian eigenmap (norm for normalised, unorm otherwise)
 #' @param p Dimension of the embedded space, default is 2
+#' @param eig_tol The value below which an eigenvalue is deemed to be 0. Ideally these would all
+#' be \code{.Machine$double.eps} but numerical instabilities mean they are often larger. A good
+#' cutoff seems to be around 1e-10. If more than one zero eigenvalue is found but this is inconsistent
+#' with the number of connected clusters then the user will be warned to adjust eig_tol.
 #' 
 #' @import igraph
 #'
 #' @export
 #'
-#' @return The p-dimensional embedding
+#' @return A list containing two entries:
+#' \itemize{
+#' \item{\code{embedding}}{A \code{p} by \code{nrow(W)} matrix with the laplacian eigenmaps embedding}
+#' \item{\code{connected_components}}{A vector of length \code{nrow(W)} of integers specifying to which
+#' connected component each cell belongs}
+#' }
 laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2, eig_tol = 1e-10) {
   measure_type <- match.arg(measure_type)
   if(nrow(W) != ncol(W)) {
@@ -188,7 +197,7 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2, eig_t
   
   if(sum(eig$values < eig_tol) > 1) {
     warning(paste('More than one non-zero eigenvalue - disjoint clusters.'))
-    g <- graph.adjency(ceiling(W), mode = 'undirected')
+    g <- graph.adjacency(ceiling(W), mode = 'undirected')
     if(no.clusters(g) != sum(eig$values < eig_tol)) {
       stop("Number of connected components doesn't match number of eigenvalues of the laplacian identified as zero. Consider changing eig_tol")
     }

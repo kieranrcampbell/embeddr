@@ -27,5 +27,11 @@ Suggests:
   NMF,
   monocle,
   HSMMSingleCell,
-    knitr
+  knitr,
+  caret,
+  cowplot,
+  devtools,
+  ggthemes,
+  goseq,
+  org.Hs.eg.db
 VignetteBuilder: knitr

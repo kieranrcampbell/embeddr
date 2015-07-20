@@ -4,7 +4,8 @@
 \alias{laplacian_eigenmap}
 \title{Laplacian eigenmaps}
 \usage{
-laplacian_eigenmap(W, measure_type = c("unorm", "norm"), p = 2)
+laplacian_eigenmap(W, measure_type = c("unorm", "norm"), p = 2,
+  eig_tol = 1e-10)
 }
 \arguments{
 \item{W}{The weighted graph adjacency matrix}
@@ -12,9 +13,19 @@ laplacian_eigenmap(W, measure_type = c("unorm", "norm"), p = 2)
 \item{measure_type}{Type of laplacian eigenmap (norm for normalised, unorm otherwise)}
 
 \item{p}{Dimension of the embedded space, default is 2}
+
+\item{eig_tol}{The value below which an eigenvalue is deemed to be 0. Ideally these would all
+be \code{.Machine$double.eps} but numerical instabilities mean they are often larger. A good
+cutoff seems to be around 1e-10. If more than one zero eigenvalue is found but this is inconsistent
+with the number of connected clusters then the user will be warned to adjust eig_tol.}
 }
 \value{
-The p-dimensional embedding
+A list containing two entries:
+\itemize{
+\item{\code{embedding}}{A \code{p} by \code{nrow(W)} matrix with the laplacian eigenmaps embedding}
+\item{\code{connected_components}}{A vector of length \code{nrow(W)} of integers specifying to which
+connected component each cell belongs}
+}
 }
 \description{
 Construct a laplacian eigenmap embedding
