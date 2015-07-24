@@ -158,7 +158,7 @@ weighted_graph <- function(x, kernel = c('nn','dist','heat'),
 #' be \code{.Machine$double.eps} but numerical instabilities mean they are often larger. A good
 #' cutoff seems to be around 1e-10. If more than one zero eigenvalue is found but this is inconsistent
 #' with the number of connected clusters then the user will be warned to adjust eig_tol.
-#' 
+#'
 #' @import igraph
 #'
 #' @export
@@ -191,10 +191,10 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2, eig_t
     eig <- eigen(L, symmetric=T) # values ordered in decreasing order
     M <- eig$vectors[,(l-1):(l-p)]
   }
-  
+
   ## deal with multiple connected components
   cc <- NULL
-  
+
   if(sum(eig$values < eig_tol) > 1) {
     warning(paste('More than one non-zero eigenvalue - disjoint clusters.'))
     g <- graph.adjacency(ceiling(W), mode = 'undirected')
@@ -203,7 +203,7 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2, eig_t
     }
     cc <- clusters(g)$membership
   } else {
-    cc <- rep(1, l)  
+    cc <- rep(1, l)
   }
 
   colnames(M) <- paste0('component_', 1:p)
@@ -214,7 +214,7 @@ laplacian_eigenmap <- function(W, measure_type = c('unorm','norm'), p = 2, eig_t
 
 #' removes the pseudotime and low dimensional trajectory
 #' @param sce The \code{SCESet}
-#' 
+#'
 #' @return An \code{SCESet} with the pseudotime & trajectory removed
 remove_pseudotime <- function(sce) {
   sce$pseudotime <- NULL
@@ -260,7 +260,7 @@ plot_degree_dist <- function(W, ignore_weights = FALSE) {
 #'
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 cluster_embedding <- function(sce, method=c('mm', 'kmeans'), k = NULL) {
-  M_xy <- redDim(sce) 
+  M_xy <- redDim(sce)
   method <- match.arg(method)
   if(method == 'kmeans') {
     km <- kmeans(M_xy, k)
@@ -361,7 +361,7 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #' for each gene (don't choose too many).
 #' @param use_short_names If fData(sce)$gene_short_names is defined and this is true then those are used
 #' on the plot
-#' @param plot_pseudotime If TRUE (default) the pseudotime curve (principal curve) is shown on the plot. If 
+#' @param plot_pseudotime If TRUE (default) the pseudotime curve (principal curve) is shown on the plot. If
 #' pData(sce)$pseudotime is null then this is ignored
 #'
 #' @import ggplot2
@@ -370,7 +370,7 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #' @export
 #'
 #' @return A \pkg{ggplot2} plot
-plot_embedding <- function(sce, color_by = 'cluster', 
+plot_embedding <- function(sce, color_by = 'cluster',
                            plot_genes = NULL, use_short_names = FALSE,
                            plot_pseudotime = TRUE) {
   ## satisfy R CMD check
@@ -387,15 +387,15 @@ plot_embedding <- function(sce, color_by = 'cluster',
     col <- match(color_by, names(pData(sce)))
     M <- cbind(M, dplyr::select(pData(sce), col))
   }
-  
+
   ## are we plotting pseudotime?
   if(('pseudotime' %in% names(pData(sce))) && plot_pseudotime) {
     M <- cbind(M, select(pData(sce), pseudotime, trajectory_1, trajectory_2))
   }
-  
+
   ## are we sizing by gene expression?
   if(!is.null(plot_genes)) {
-    if(is.character(plot_genes)) { 
+    if(is.character(plot_genes)) {
       plot_names <- plot_genes
     } else {
       plot_names <- featureNames(sce)[plot_genes]
@@ -404,16 +404,16 @@ plot_embedding <- function(sce, color_by = 'cluster',
     y <- t(y)
     y <- data.frame(y)
     M <- cbind(M, y)
-    M <- melt(M, id.vars=setdiff(names(M), plot_names), 
+    M <- melt(M, id.vars=setdiff(names(M), plot_names),
                        variable.name='gene', value.name='count')
    if(use_short_names) M$gene <- mapvalues(M$gene, from = featureNames(sce), to = fData(sce)$gene_short_name)
   }
-  
+
   if(('pseudotime' %in% names(pData(sce))) && plot_pseudotime) M <- arrange(M, pseudotime)
-  
+
 
   plt <- ggplot(data=M)
-  
+
   if(color_by %in% names(M)) { # colouring by something
     if(color_by == 'cluster') {
       mapping_str <- paste0("as.factor(", color_by, ")")
@@ -429,7 +429,7 @@ plot_embedding <- function(sce, color_by = 'cluster',
                                          fill = mapping_str, size = "count"), color = 'gray20',
                               alpha = 0.65, shape = 21)
     }
-    
+
     if(is.numeric(pData(sce)[[color_by]]) && all(pData(sce)[[color_by]] %% 1 != 0)) {
       plt <- plt + scale_fill_continuous(name = color_by)
     } else {
@@ -439,10 +439,10 @@ plot_embedding <- function(sce, color_by = 'cluster',
   } else { # not colouring by something
     warning(paste('color_by string',color_by,'not found in pData(SCESet)'))
     if(is.null(plot_genes)) {
-      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"), 
+      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2"),
                               alpha = 0.65, size = 3.5)
     } else {
-      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2", size = "count"), 
+      plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2", size = "count"),
                               alpha = 0.65)
     }
   }
@@ -460,9 +460,9 @@ plot_embedding <- function(sce, color_by = 'cluster',
   } else {
     plt <- plt + theme_bw()
   }
-  
+
   if(!is.null(plot_genes)) plt <- plt + facet_wrap( ~ gene )
-  
+
   return( plt )
 }
 
@@ -841,10 +841,10 @@ plot_pseudotime_density <- function(sce, color_by = NULL, reverse = FALSE) {
   plt <- ggplot(pData(sce))
   if(!is.null(color_by)) {
     if(color_by %in% names(pData(sce))) {
-    plt <- plt + geom_density(aes_string(x = "pseudotime", fill = color_by))
+    plt <- plt + geom_density(aes_string(x = "pseudotime", fill = color_by), alpha = 0.6)
    } else {
     warning(paste('Variable',color_by,'not found in names(pData(sce))'))
-    plt <- plt + geom_density(aes_string(x = "pseudotime"))
+    plt <- plt + geom_density(aes_string(x = "pseudotime"), alpha = 0.6)
    }
     }
   else {

@@ -3,19 +3,12 @@ title: "Laplacian eigenmaps & principal curves for pseudotemporal ordering of si
   gene expression"
 author: "Kieran Campbell"
 date: "`r Sys.Date()`"
-output: 
-  rmarkdown::html_vignette:
+output:
+  html_document:
+    fig_align: center
     toc: yes
-    fig_width: 6
-    fig_height: 4
-    pandoc_args: [
-      "+RTS", "-K64m",
-      "-RTS"
-    ]
-vignette: >
-  %\VignetteIndexEntry{Vignette Title}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+  pdf_document:
+    toc: yes
 ---
 
 Here we show how `embeddr` (= spectral embedding + principal curves) can be used for pseudotemporal ordering of single-cell gene expression data using the [monocle](http://cole-trapnell-lab.github.io/monocle-release/) dataset. This uses the `HSMMSingleCell` dataset that is bundled with monocle.
@@ -242,15 +235,29 @@ plot_in_pseudotime(sce_23[mrf_ind,], use_short_names = TRUE)
 nns <- c(5,6,8,10,15,20)
 sce_npst <- sce
 sce_npst$pseudotime <- NULL
-embedding_plots <- lapply(nns, function(i) {
+sce_list <- lapply(nns, function(i) {
   sce_map <- embeddr(sce_npst, genes_for_embedding = gene_indices, nn = i)
   sce_map <- fit_pseudotime(sce_map, clusters=c(1, 2))
 #   R <- dplyr::select(pData(sce_map), trajectory_1, trajectory_2, pseudotime)
 #   R <- cbind(R, redDim(sce_map))
-  plot_embedding(sce_map)
+  sce_map
 })
 
-plot_grid(plotlist = embedding_plots, labels = as.character(nns))
+X <- do.call(rbind, lapply(sce_list, redDim))
+X <- cbind(X, nn = rep(nns, each = dim(sce_list[[1]])[2]))
+PD <- do.call(rbind, lapply(sce_list, pData))
+X <- cbind(X, dplyr::select(PD, pseudotime, cluster, trajectory_1, trajectory_2))
+X <- dplyr::arrange(X, nn, pseudotime)
+
+plt <- ggplot(data = X)
+plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
+                                         fill = "cluster"), color = 'gray20',
+                              alpha = 0.65, size = 3.5, shape = 21)
+plt <- plt + facet_wrap(~ nn)
+plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
+                           data=X, color='black',
+                           size = 1.5, alpha = 0.8, linetype=2)
+plt
 ```
 
 ### Subsampling the number of cells
@@ -261,30 +268,56 @@ Subsample to check robustness:
 ncv <- 8
 inds <- createFolds(1:ncol(sce), ncv)
 
-embedding_plots <- lapply(1:ncv, function(i) {
+sce_subset_list <- lapply(1:ncv, function(i) {
   sce_reduced <- sce[gene_indices ,-inds[[i]] ]
   sce_reduced <- embeddr(sce_reduced)
   sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,2))
-  return(plot_embedding(sce_reduced))
+  sce_reduced
 })
 
-plot_grid(plotlist = embedding_plots[1:4])
-plot_grid(plotlist = embedding_plots[5:8])
+X <- do.call(rbind, lapply(sce_subset_list, redDim))
+X <- cbind(X, subsample = unlist(sapply(1:length(sce_subset_list), function(i) rep(i, dim(sce_subset_list[[i]])[2]))))
+PD <- do.call(rbind, lapply(sce_subset_list, pData))
+X <- cbind(X, dplyr::select(PD, pseudotime, cluster, trajectory_1, trajectory_2))
+X <- dplyr::arrange(X, subsample, pseudotime)
+
+plt <- ggplot(data = X)
+plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
+                                         fill = "cluster"), color = 'gray20',
+                              alpha = 0.65, size = 3.5, shape = 21)
+plt <- plt + facet_wrap(~ subsample)
+plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
+                           data=X, color='black',
+                           size = 1.5, alpha = 0.8, linetype=2)
+plt
 ```
 
 Try the same with 1/2 of the data:
 ```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=7, warning=FALSE}
 inds_2 <- createMultiFolds(1:ncol(sce), k=2, times=6)
 
-embeddings_2 <- lapply(1:length(inds_2), function(i) {
+sce_subset_list2 <- lapply(1:length(inds_2), function(i) {
   sce_reduced <- sce[gene_indices ,-inds_2[[i]] ]
   sce_reduced <- embeddr(sce_reduced, nn = 5)
   sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,2))
-  return(plot_embedding(sce_reduced))
+  return(sce_reduced)
 })
 
-plot_grid(plotlist = embeddings_2[1:6])
-plot_grid(plotlist = embeddings_2[7:12])
+X <- do.call(rbind, lapply(sce_subset_list2, redDim))
+X <- cbind(X, subsample = unlist(sapply(1:length(sce_subset_list2), function(i) rep(i, dim(sce_subset_list2[[i]])[2]))))
+PD <- do.call(rbind, lapply(sce_subset_list2, pData))
+X <- cbind(X, dplyr::select(PD, pseudotime, cluster, trajectory_1, trajectory_2))
+X <- dplyr::arrange(X, subsample, pseudotime)
+
+plt <- ggplot(data = X)
+plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
+                                         fill = "cluster"), color = 'gray20',
+                              alpha = 0.65, size = 3.5, shape = 21)
+plt <- plt + facet_wrap(~ subsample)
+plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
+                           data=X, color='black',
+                           size = 1.5, alpha = 0.8, linetype=2)
+plt
 ```
 And see that the pseudotime fits are roughly constant:
 
@@ -354,7 +387,7 @@ In the original monocle dataset, only a small number of cells were assigned to g
 
 ```{r cont1,  cache=TRUE, results='asis'}
 phenoData(sce)$monocle_classification <- mapvalues(pData(sce)$State, from=1:3, c('non-cont','non-cont','cont'))
-phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','cont','non-cont'))
+phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','non-cont','cont'))
 
 print(kable(as.data.frame(table(dplyr::select(pData(sce), monocle_classification, embeddr_classification)))))
 ```
@@ -390,13 +423,14 @@ ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), 
   geom_boxplot(outlier.shape=NA) + geom_jitter(alpha=0.5) +  theme_bw() + xlab('') +
   theme(axis.text.x = element_text(angle = -50, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE) +
   ylab('log10(FPKM + 1) counts') + ggtitle('Expression of mesenchymal markers') 
+
 ```
 
 So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
 ```{r markers-in-space, cache=T, fig.width=9, fig.height=8, message = FALSE}
 cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("CDK1", "MYOG", "PDGFRA", 
                                                                     "SPHK1", "MYF5", "NCAM1")))
-plot_embedding(sce, plot_genes = cont_genes, plot_pseudotime = FALSE)
+plot_embedding(sce, plot_genes = cont_genes, plot_pseudotime = FALSE, use_short_names = TRUE)
 ```
 
 Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:
@@ -474,7 +508,7 @@ plot(hc, labels=FALSE)
 ```
 
 Now look at conserved modules:
-```{r plot-modules, fig.width=6, fig.height=4, cache=TRUE, message=FALSE}
+```{r plot-modules, fig.width=3, fig.height=8, cache=TRUE, message=FALSE}
 n_cuts <- 4
 gene_classes <- cutree(hc, n_cuts)
       
@@ -494,7 +528,7 @@ pe_melted <- inner_join(pe_melted, mean_expr_per_group)
 ## pe_melted <- arrange(pe_melted, gene, pseudotime)
 
 ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
-  facet_wrap(~ class) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  facet_wrap(~ class, ncol = 1) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
   theme_bw() + ylab('Expression') # add ncol = 1 for vertical representation
 
 ```

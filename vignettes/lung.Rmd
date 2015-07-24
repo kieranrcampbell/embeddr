@@ -1,7 +1,7 @@
 ---
 title: "Pseudotemporal ordering of cells from the distal lung epithelium"
 author: "Kieran Campbell"
-date: "03/24/2015"
+date: "`r Sys.Date()`"
 output:
   html_document:
     fig_align: center
@@ -34,8 +34,8 @@ set.seed(123)
 
 ```{r load-data, cache=TRUE}
 ## load object 'lsce' 
-#data_path <- '~/oxford/embeddr/data/lsce.Rdata'
-data_path <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
+data_path <- '~/oxford/embeddr/data/lsce.Rdata'
+#data_path <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
 load(data_path)
 lsce@lowerDetectionLimit <- 0 # from paper
 ```
@@ -215,10 +215,13 @@ markers2 <- c('Lcn2', 'Hc','Trf','Lyz2','S100g','Lyz1','Fabp5',
             'Egfl6','Soat1','Bex2','Muc1','Sftpc')
 pseudotime_markers_at2 <- as.character(sig_genes)
 
-print(intersect(markers2, pseudotime_markers_at2))
-print(setdiff(markers2, pseudotime_markers_at2))
-print(setdiff(pseudotime_markers_at2, markers2))
-
+at2_both <- intersect(markers2, pseudotime_markers_at2)
+at2_prev <- setdiff(markers2, pseudotime_markers_at2)
+at2_embeddr <- setdiff(pseudotime_markers_at2, markers2)
+print(c(length(at2_both), length(at2_prev), length(at2_embeddr)))
+print(at2_both)
+print(at2_prev)
+print(at2_embeddr)
 ```
 
 And plot pseudotime density:
@@ -347,27 +350,31 @@ markers1 <- c('Aqp5','Pdpn','Rtkn2','Ager','Emp2','Cav1','Clic5','Lmo7',
 pseudotime_markers_at1 <- names(gene_classes[gene_classes == 2])
 pseudotime_markers_at2_upreg <- names(gene_classes[gene_classes == 1])
 
-print(intersect(markers1, pseudotime_markers_at1))
-print(setdiff(markers1, pseudotime_markers_at1))
-print(setdiff(pseudotime_markers_at1, markers1))
+at1_both <- intersect(markers1, pseudotime_markers_at1)
+at1_original <- setdiff(markers1, pseudotime_markers_at1)
+at1_embeddr <- setdiff(pseudotime_markers_at1, markers1)
 
-all_at2 <- union(pseudotime_markers_at2_upreg, pseudotime_markers_at2)
-print(intersect(markers2, all_at2))
-print(setdiff(markers2, all_at2))
-print(setdiff(all_at2, markers2))
+print(c(length(at1_both), length(at1_original), length(at1_embeddr)))
+
+all_pseudotime_at2 <- union(pseudotime_markers_at2_upreg, pseudotime_markers_at2)
+all_at2_both <- intersect(markers2, all_pseudotime_at2)
+all_at2_original <- setdiff(markers2, all_pseudotime_at2)
+all_at2_embeddr <- setdiff(all_pseudotime_at2, markers2)
+
+print(c(length(all_at2_both), length(all_at2_original), length(all_at2_embeddr)))
 ```
 
 ### Bringing it all together
 
 ```{r big-heatmap, fig.align='center', fig.width=9, fig.height=4.5}
 agree_1 <- intersect(pseudotime_markers_at1, markers1)
-agree_2 <- intersect(all_at2, markers2)
+agree_2 <- intersect(all_pseudotime_at2, markers2)
 
 paper_only_1 <- setdiff(markers1, pseudotime_markers_at1)
-paper_only_2 <- setdiff(markers2, all_at2)
+paper_only_2 <- setdiff(markers2, all_pseudotime_at2)
 
 embeddr_only_1 <- setdiff(pseudotime_markers_at1, markers1)
-embeddr_only_2 <- setdiff(all_at2, markers2)
+embeddr_only_2 <- setdiff(all_pseudotime_at2, markers2)
 
 all_pseudotime_markers <- c(agree_1, paper_only_1, embeddr_only_1,
                             agree_2, paper_only_2, embeddr_only_2)
