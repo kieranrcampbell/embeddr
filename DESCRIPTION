@@ -31,6 +31,5 @@ Suggests:
   knitr,
   cowplot,
   ggthemes,
-  Biocstyle,
-  knitr
+  BiocStyle,
 VignetteBuilder: knitr
