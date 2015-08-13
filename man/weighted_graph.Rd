@@ -17,7 +17,7 @@ weighted_graph(x, kernel = c("nn", "dist", "heat"),
 Belkin & Niyogi}
 
 \item{metric}{The metric with which to assess 'closeness' for nearest neighbour selection, one of
-"correlation" (pearson) or "euclidean". Default is "correlation".}
+'correlation' (pearson) or 'euclidean'. Default is 'correlation'.}
 
 \item{nn}{Number of nearest neighbours if kernel == 'nn'}
 
@@ -39,5 +39,9 @@ An n by n adjacency matrix
 }
 \description{
 Construct a weighted graph adjacency matrix
+}
+\examples{
+x <- matrix(rnorm(50), ncol = 10) # synthetic data matrix
+wg <- weighted_graph(x)
 }
 

@@ -389,6 +389,9 @@ In the original monocle dataset, only a small number of cells were assigned to g
 phenoData(sce)$monocle_classification <- mapvalues(pData(sce)$State, from=1:3, c('non-cont','non-cont','cont'))
 phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','non-cont','cont'))
 
+plot_embedding(sce, color_by = "monocle_classification")
+plot_embedding(sce, color_by = "embeddr_classification")
+
 print(kable(as.data.frame(table(dplyr::select(pData(sce), monocle_classification, embeddr_classification)))))
 ```
 

@@ -22,4 +22,11 @@ This function fits both smoothing B-spline tobit regression models for \strong{a
 genes in \code{sce} and computes p-values by comparing to the null model using
 a likelihood ratio test.
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+df_pval <- pseudotime_test(sce[1:4,]) # only for first four genes
+}
 

@@ -19,4 +19,11 @@ A `ggplot` object
 \description{
 This returns a \code{ggplot} density plot of the cells across pseudotime.
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+plot_pseudotime_density(sce)
+}
 

@@ -12,11 +12,18 @@ fit_pseudotime_model(sce, gene)
 \item{gene}{The gene name to fit}
 }
 \value{
-An object of class VGAM
+An object of class AER::tobit
 }
 \description{
 This function fits the expression profile of y as a function of
 pseudotime using a natural cubic spline of degree three. A tobit model
 is used to censor values less than min_expr
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+model <- fit_pseudotime_model(sce, 1) # fit for first gene
 }
 

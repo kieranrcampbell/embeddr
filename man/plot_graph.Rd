@@ -17,4 +17,10 @@ This plots the cells in the reduced dimension and connects cells if they are
 connected in the nearest neighbour graph W. A vertice between cells i and j is
 coloured red if both i and j are nearest neigbours of each other and grey otherwise.
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+plot_graph(sce)
+}
 

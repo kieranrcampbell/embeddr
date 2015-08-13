@@ -21,12 +21,19 @@ plot will be the gene short names.}
 \item{use_log_scale}{Logical If TRUE scale_y_log10 is added to plot}
 
 \item{facet_wrap_scales}{Passed to the scales argument in \code{facet_wrap}.
- Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")}
+ Should scales be fixed ('fixed', the default), free ('free'), or free in one dimension ('free_x', 'free_y')}
 }
 \value{
 A \pkg{ggplot2} plot
 }
 \description{
-Plot a set of genes through pseudotime
+Plot a set of genes through pseudotime using smooth LOESS curves.
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+plot_in_pseudotime(sce[1:4,]) # plot first four genes
 }
 

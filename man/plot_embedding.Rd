@@ -30,4 +30,10 @@ This function takes a data frame with at least positional (component_0 & compone
 and plots the resulting embedding. If clusters are assigned it can colour by these, and if a pseudotime
 trajectory is assigned it will plot this through the embeddding.
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+plot_embedding(sce)
+}
 

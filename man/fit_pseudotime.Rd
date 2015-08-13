@@ -24,4 +24,10 @@ The dataframe \code{M} with three new variables:
 \description{
 Fits the pseudotime curve using principal curves from the princurve library
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+}
 

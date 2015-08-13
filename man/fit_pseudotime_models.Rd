@@ -11,8 +11,18 @@ fit_pseudotime_models(sce, n_cores = 2)
 
 \item{n_cores}{The number of cores to use in the call to \code{mclapply}}
 }
+\value{
+A list of models returned by AER::tobit
+}
 \description{
 This will iterate over every gene in the \code{SCESet} and produce a model fit
 for each. \strong{WARNING}: The list returned can be huge, so use only on a few genes.
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+models <- fit_pseudotime_models(sce, n_cores = 1)
 }
 

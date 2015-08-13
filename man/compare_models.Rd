@@ -7,14 +7,23 @@
 compare_models(model, null_model)
 }
 \arguments{
-\item{model}{The full model y ~ pseudotime}
+\item{model}{The full model y ~ pseudotime returned by AER::tobit}
 
-\item{null_model}{The null model y ~ 1}
+\item{null_model}{The null model y ~ 1 returned by AER::tobit}
 }
 \value{
 The p-value
 }
 \description{
 Perform likelihood ratio test
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+full_model <- fit_pseudotime_model(sce, 1) # fit for first gene
+null_model <- fit_null_model(sce, 1) # fit for first gene
+pval <- compare_models(full_model, null_model)
 }
 

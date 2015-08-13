@@ -17,8 +17,19 @@ which a \code{predict} function is available, then a single vector corresponding
 
 \item{n_cores}{The number of cores to pass to \code{mclapply}.}
 }
+\value{
+A dataframe of predicted expression where rows are cells (pseudotime) and
+columns are genes
+}
 \description{
 Given a list of models return a matrix corresponding to the prediction from the models.
 Each column represents a gene and each row its expression at a given point in pseudotime.
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+pe <- predicted_expression(sce[1:4,]) # use first four genes
 }
 

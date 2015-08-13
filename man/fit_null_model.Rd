@@ -12,10 +12,17 @@ fit_null_model(sce, gene)
 \item{gene}{The gene name to fit}
 }
 \value{
-An object of class VGAM
+An object returned by AER::tobit
 }
 \description{
 This function fits the null expression profile in y (ie y ~ 1). A tobit model is
 used to censor values less than min_expr
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+model <- fit_null_model(sce, 1) # fit for first gene
 }
 

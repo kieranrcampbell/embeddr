@@ -30,4 +30,10 @@ connected component each cell belongs}
 \description{
 Construct a laplacian eigenmap embedding
 }
+\examples{
+## create synthetic weight matrix
+W <- matrix(sample(0:1, 25, replace = TRUE), nrow=5)
+diag(W) <- 0 ; W <- 0.5*(W + t(W))
+le <- laplacian_eigenmap(W) # returns a list with entries embedding and connected_components
+}
 

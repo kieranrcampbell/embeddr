@@ -20,4 +20,10 @@ The dataframe M with a new numeric variable `cluster` containing the assigned cl
 Cluster the embedded representation using either kmeans or mixture models
 from the mclust package
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- cluster_embedding(sce)
+}
 

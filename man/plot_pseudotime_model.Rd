@@ -16,7 +16,7 @@ re-calculated}
 \item{n_cores}{Number of cores to use when calculating the pseudotime models if `model` is NULL}
 
 \item{facet_wrap_scale}{Passed to the scales argument in \code{facet_wrap}.
-Should scales be fixed ("fixed", the default), free ("free"), or free in one dimension ("free_x", "free_y")}
+Should scales be fixed ('fixed', the default), free ('free'), or free in one dimension ('free_x', 'free_y')}
 
 \item{use_log_scale}{Logical If TRUE scale_y_log10 is added to plot}
 
@@ -27,5 +27,12 @@ An plot object from \code{ggplot}
 }
 \description{
 Plot the fit in pseudotime
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+plot_pseudotime_model(sce[1,]) # select first gene
 }
 

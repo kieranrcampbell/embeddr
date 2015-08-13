@@ -21,4 +21,11 @@ mean, variance, CV2, signal to noise ratio)
 Calculate various metrics (mean, variance, CV2 and signal-to-noise ratio) using
 a sliding window approach
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+metrics <- calculate_metrics(sce, 1)
+}
 

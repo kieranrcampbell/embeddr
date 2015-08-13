@@ -15,4 +15,11 @@ reverse_pseudotime(sce)
 \description{
 Reverse the pseudotimes of cells via pseudotime x -> -x + max(x) + min(x)
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+sce <- reverse_pseudotime(sce)
+}
 

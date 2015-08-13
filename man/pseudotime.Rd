@@ -15,4 +15,11 @@ A numeric vector of pseudotimes
 \description{
 Equivalent to \code{pData(sce)$pseudotime}
 }
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+pseudotime(sce)
+}
 

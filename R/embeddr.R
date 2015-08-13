@@ -35,7 +35,7 @@
 #' 
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 embeddr <- function(sce, genes_for_embedding = NULL, kernel = c("nn", "dist", "heat"), metric = c("correlation", 
     "euclidean", "cosine"), nn = round(log(ncol(sce))), eps = NULL, t = NULL, symmetrize = c("mean", "ceil", 
@@ -173,7 +173,7 @@ weighted_graph <- function(x, kernel = c("nn", "dist", "heat"), metric = c("corr
 #' @examples 
 #' ## create synthetic weight matrix
 #' W <- matrix(sample(0:1, 25, replace = TRUE), nrow=5)
-#' diag(W) <- 0 ; W <- 0.5(W + t(W))
+#' diag(W) <- 0 ; W <- 0.5*(W + t(W))
 #' le <- laplacian_eigenmap(W) # returns a list with entries embedding and connected_components
 laplacian_eigenmap <- function(W, measure_type = c("unorm", "norm"), p = 2, eig_tol = 1e-10) {
     measure_type <- match.arg(measure_type)
@@ -222,6 +222,7 @@ laplacian_eigenmap <- function(W, measure_type = c("unorm", "norm"), p = 2, eig_
 #' @param sce The \code{SCESet}
 #'
 #' @return An \code{SCESet} with the pseudotime & trajectory removed
+#' @export
 remove_pseudotime <- function(sce) {
     sce$pseudotime <- NULL
     sce$trajectory_1 <- NULL
@@ -248,7 +249,7 @@ remove_pseudotime <- function(sce) {
 #' @return The dataframe M with a new numeric variable `cluster` containing the assigned cluster
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- cluster_embedding(sce)
 cluster_embedding <- function(sce, method = c("mm", "kmeans"), k = NULL) {
@@ -263,18 +264,6 @@ cluster_embedding <- function(sce, method = c("mm", "kmeans"), k = NULL) {
     }
     return(sce)
 }
-
-# fit_pseudotime_thinning <- function(M, clusters=NULL, ...) {
-# load_all('/net/isi-scratch/kieran/embeddr/curver/') Mp <- M if(!is.null(clusters)) Mp <- filter(Mp, cluster
-# %in% clusters) Y <- curver::reconstruct(select(Mp, component_1, component_2), niter=1, h=0.2) #Y <-
-# curver::reconstruct(select(Mp, component_1, component_2), ...)  D <- as.matrix(dist(Y)) g <-
-# graph.adjacency(D, weighted=TRUE, mode='undirected') g_mst <- minimum.spanning.tree(g) A <-
-# as.matrix(get.adjacency(g_mst)) endpoints <- which(rowSums(A) == 1) ordering <- get.shortest.paths(g_mst,
-# from=endpoints) paths <- ordering$vpath best_path <- paths[[ which.max(sapply(paths, length)) ]] Z <-
-# Y[ordering$vpath[[1]],] ## now we have the ordering want to work out the arc-length n <- dim(Z)[1] Z_start
-# <- Z[1:n-1,] Z_end <- Z[2:n,] Z_diff <- Z_end - Z_start pst <- sqrt(rowSums(Z_diff^2)) pseudotime <- c(0,
-# cumsum(pst)) Mp$pseudotime <- pseudotime[invPerm(as.integer(ordering$vpath[[1]]))] Mp$trajectory_1 <- Y[,1]
-# Mp$trajectory_2 <- Y[,2] return(Mp) }
 
 #' Fit the pseudotime curve
 #'
@@ -298,7 +287,7 @@ cluster_embedding <- function(sce, method = c("mm", "kmeans"), k = NULL) {
 #' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 fit_pseudotime <- function(sce, clusters = NULL, ...) {
@@ -350,7 +339,7 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
 #' @return A \pkg{ggplot2} plot
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' plot_embedding(sce)
 plot_embedding <- function(sce, color_by = "cluster", plot_genes = NULL, use_short_names = FALSE, plot_pseudotime = TRUE) {
@@ -470,7 +459,7 @@ plot_embedding <- function(sce, color_by = "cluster", plot_genes = NULL, use_sho
 #'  
 #'  @examples 
 #'  library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' plot_in_pseudotime(sce[1:4,]) # plot first four genes
@@ -514,7 +503,7 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = 
 #' @return \code{sce} with the pseudotime reversed.
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' sce <- reverse_pseudotime(sce)
@@ -544,7 +533,7 @@ reverse_pseudotime <- function(sce) {
 #' @return A ggplot graphic
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' plot_graph(sce)
 plot_graph <- function(sce) {
@@ -596,7 +585,7 @@ plot_graph <- function(sce) {
 #' @return An object of class AER::tobit
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' model <- fit_pseudotime_model(sce, 1) # fit for first gene
@@ -621,7 +610,7 @@ fit_pseudotime_model <- function(sce, gene) {
 #' @return An object returned by AER::tobit
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' model <- fit_null_model(sce, 1) # fit for first gene
@@ -649,7 +638,7 @@ fit_null_model <- function(sce, gene) {
 #' @return An plot object from \code{ggplot}
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' plot_pseudotime_model(sce[1,]) # select first gene
@@ -714,7 +703,7 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2, facet_wrap_sc
 #' @return The p-value
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' full_model <- fit_pseudotime_model(sce, 1) # fit for first gene
@@ -738,7 +727,7 @@ compare_models <- function(model, null_model) {
 #' @export
 #' @examples 
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' pval <- gene_pseudotime_test(sce, 1) # select first gene
@@ -773,7 +762,7 @@ gene_pseudotime_test <- function(sce, gene, full_model = NULL) {
 #' @export
 #' @examples 
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' df_pval <- pseudotime_test(sce[1:4,]) # only for first four genes
@@ -801,7 +790,7 @@ pseudotime_test <- function(sce, n_cores = 2) {
 #' @return A list of models returned by AER::tobit
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' models <- fit_pseudotime_models(sce, n_cores = 1)
@@ -837,7 +826,7 @@ fit_pseudotime_models <- function(sce, n_cores = 2) {
 #' @export
 #' @examples 
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' pe <- predicted_expression(sce[1:4,]) # use first four genes
@@ -880,7 +869,7 @@ predicted_expression <- function(sce, models = NULL, n_cores = 2) {
 #' @return A `ggplot` object
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' plot_pseudotime_density(sce)
@@ -921,7 +910,7 @@ plot_pseudotime_density <- function(sce, color_by = NULL, reverse = FALSE) {
 #' @return A ggplot graphic
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' plot_pseudotime_metrics(sce)
@@ -946,7 +935,7 @@ plot_pseudotime_metrics <- function(sce, ...) {
 #' mean, variance, CV2, signal to noise ratio)
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' metrics <- calculate_metrics(sce, 1) 
@@ -984,7 +973,7 @@ calculate_metrics <- function(sce, gene, window_size = NULL) {
 #' @return A numeric vector of pseudotimes
 #' @examples
 #' library(scater)
-#' data('sc_example_counts') ; example_sceset <- newSCESet(countData = sc_example_counts)
+#' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' pseudotime(sce)

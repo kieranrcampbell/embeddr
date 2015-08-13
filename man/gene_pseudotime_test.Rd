@@ -4,17 +4,27 @@
 \alias{gene_pseudotime_test}
 \title{Test a single gene as a function of pseudotime}
 \usage{
-gene_pseudotime_test(gene_name, sce, full_model = NULL)
+gene_pseudotime_test(sce, gene, full_model = NULL)
 }
 \arguments{
-\item{gene_name}{Name of the gene to be tested. Must be consistent with `featureNames(sce)`}
-
 \item{sce}{An object of class SCESet}
+
+\item{gene}{Name or index of the gene to be tested.}
 
 \item{full_model}{If a full pseudotime model has already been calculated, use that. Otherwise (if NULL, default),
 recalculate one on the fly.}
 }
+\value{
+A p-value for the given gene
+}
 \description{
 Test a single gene as a function of pseudotime
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+pval <- gene_pseudotime_test(sce, 1) # select first gene
 }
 

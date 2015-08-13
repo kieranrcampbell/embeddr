@@ -21,7 +21,7 @@ object contains the full original gene set found in sce.}
 Belkin & Niyogi}
 
 \item{metric}{The metric with which to assess 'closeness' for nearest neighbour selection, one of
-"correlation" (pearson) or "euclidean". Default is "correlation".}
+'correlation' (pearson) or 'euclidean'. Default is 'correlation'.}
 
 \item{nn}{Number of nearest neighbours if kernel == 'nn'}
 
@@ -49,5 +49,10 @@ An object of class SCESet
 }
 \description{
 Laplacian eigenmaps embedding of single-cell RNA-seq data.
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
 }
 

@@ -17,6 +17,13 @@ A ggplot graphic
 }
 \description{
 Plot various metrics (mean, variance, CV2 and signal-to-noise ratio) using
-a sliding window approach
+a sliding window approach. Calculates metrics if not already done so.
+}
+\examples{
+library(scater)
+data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
+sce <- embeddr(sce)
+sce <- fit_pseudotime(sce)
+plot_pseudotime_metrics(sce)
 }
 

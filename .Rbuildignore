@@ -1,7 +1,8 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
-^vignettes/embeddr_vignette_cache
-^vignettes/lung_cache
-^vignettes/embeddr_vignette_files
-^vignettes/lung_files
+vignettes/vignette_cache
+vignettes/vignette_files
 ^\.git
+vignettes/*\.html
+html$
+\.git
