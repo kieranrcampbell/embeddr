@@ -769,9 +769,9 @@ gene_pseudotime_test <- function(sce, gene, full_model = NULL) {
 pseudotime_test <- function(sce, n_cores = 2) {
     p_vals <- NULL
     if (n_cores == 1) {
-        p_vals <- sapply(featureNames(sce), function(gene_name) gene_pseudotime_test(gene_name, sce))
+        p_vals <- sapply(featureNames(sce), function(gene_name) gene_pseudotime_test(sce, gene_name))
     } else {
-        p_vals <- unlist(mclapply(featureNames(sce), function(gene_name) gene_pseudotime_test(gene_name, sce)))
+        p_vals <- unlist(mclapply(featureNames(sce), function(gene_name) gene_pseudotime_test(sce, gene_name)))
     }
     q_vals <- p.adjust(p_vals, method = "BH")
     return(data.frame(gene = featureNames(sce), p_val = p_vals, q_val = q_vals))

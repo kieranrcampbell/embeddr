@@ -4,30 +4,26 @@ title: "Laplacian eigenmaps & principal curves for pseudotemporal ordering of si
 author: "Kieran Campbell"
 date: "`r Sys.Date()`"
 output:
-  html_document:
-    fig_align: center
-    toc: yes
-  pdf_document:
+  BiocStyle::html_document:
     toc: yes
 ---
+```{r style, echo = FALSE, results = 'asis'}
+BiocStyle::markdown()
+```
 
+### Introduction and setup
 Here we show how `embeddr` (= spectral embedding + principal curves) can be used for pseudotemporal ordering of single-cell gene expression data using the [monocle](http://cole-trapnell-lab.github.io/monocle-release/) dataset. This uses the `HSMMSingleCell` dataset that is bundled with monocle.
 
 ```{r load-all, message=FALSE, warning=FALSE}
 library(monocle) ## for monocle data
-library(devtools) ## for package development
 library(reshape2) ## to melt data frames
-library(plyr) 
 library(dplyr) 
 library(ggplot2)
-library(ggthemes)
-library(caret) ## for cross validation steps
 library(scater) ## to hold single-cell data
 library(knitr) ## for kable function
 library(goseq) ## for GO enrichment
 library(org.Hs.eg.db) ## for HG19 GO annotations
 library(embeddr)
-library(cowplot)
 ```
 
 
@@ -55,47 +51,10 @@ if("HSMM" %in% hsmm_data_available) {
 phenoData(sce)$cell_id <- rownames(pData(sce))
 ```
 
-First we go through cleaning the monocle dataset and selecting for marker genes only:
-
-```{r clean-monocle, cache=TRUE}
-## convert back to monocle
-HSMM <- toCellDataSet(sce, use_as_exprs = "fpkm")
-marker_genes <- row.names(subset(fData(HSMM),
-                                 gene_short_name %in% c("MEF2C", "MEF2D", "MYF5", "ANPEP", "PDGFRA",
-                  "MYOG", "TPM1", "TPM2", "MYH2", "MYH3", "NCAM1",
-                  "CDK1", "CDK2", "CCNB1", "CCNB2", "CCND1", "CCNA")))
-x <- log(exprs(HSMM[marker_genes,]) + 1)
-x <- t(scale(t(x)))
-# sce <- sce[marker_genes,]
-# exprs(sce) <- x
-```
 
 ### Laplacian eigenmaps
 The embeddr workflow creates the nearest neighbour graph then returns the laplacian eigenmap. We can do this using `embeddr::embeddr` with all options available, though `embeddr::weighted_graph` and `embeddr::laplacian_eigenmap` are available to perform each step by hand or with custom distance metrics. The default options specify a nearest neighbour graph with $k = round(log(n))$ neighbours for $n$ cells. Other options for creating the graph (such as distance measures and heat kernels) are also available. 
 
-```{r create-graph, cache=TRUE}
-sce <- embeddr(sce, genes_for_embedding = marker_genes)
-plot_embedding(sce)
-```
-
-The function `embeddr::plot_embedding` can be used at any time on the appropriate `data.frame` objects and will display all relevant information. We can start by seeing where the different inferred states from the monocle dataset fall on our embedding:
-
-```{r monocle-state,  cache=TRUE}
-HSMM <- setOrderingFilter(HSMM, marker_genes)
-HSMM <- reduceDimension(HSMM, use_irlba = F)
-HSMM <- orderCells(HSMM, num_paths=2, reverse=F)
-plot_spanning_tree(HSMM)
-phenoData(sce)$monocle_state <- pData(HSMM)$State
-plot_embedding(sce, color_by = 'monocle_state')
-```
-
-So there appears to be reasonable correspondance between the monocle clusters and natural clusters in our data. The `embeddr::cluster_embedding` function applies k-means clustering to the dataset:
-
-```{r cluster-embedding,  cache=TRUE, message=FALSE}
-set.seed(123)
-sce <- cluster_embedding(sce, k=3, method='mm')
-plot_embedding(sce)
-```
 
 ### Selecting genes for the embedding
 
@@ -103,7 +62,7 @@ In standard manifold learning problems it is recommended that each feature is ap
 
 The entire transcriptome can be used to construct the embedding. However, it can be useful to pick only high-variance genes removing some of the residual noise from housekeeping or lowly expressed ones. The justification behind this is that the main source of variation in our dataset will be attributed to the process of interest. These high variance genes can be found using spike-ins (see Brennecke et al. Nature Methods 2014) or simlpy by fitting CV-mean curves and finding genes with a CV much higher than the mean:
 ```{r cv2, cache=TRUE, }
-x <- t(log10(exprs(HSMM) + 1))
+x <- t(exprs(sce)) / log(10) * log(2) # convert to log10 for CV-mean fitting
 x_mean <- colMeans(x)
 x_var <- apply(x, 2, var)
 genes_for_fit <- x_mean > 0.3
@@ -115,16 +74,13 @@ f <- function(x) ak[1] * 10^(-ak[2] * x)
 genes_for_embedding <- (CV2 > 4 * predict(fit_loglin))
 df_fit$for_embedding <- as.factor(genes_for_embedding)
 ggplot(df_fit, aes(x=m, y=CV2, color = for_embedding)) + geom_point() +
-  theme_bw() + xlab('Mean') + ylab('CV2') + scale_color_fivethirtyeight() +
+  theme_bw() + xlab('Mean') + ylab('CV2') + ggthemes::scale_color_fivethirtyeight() +
   stat_function(fun=f, color='black')
 ```
 
-Next we take the log10 of the dataset (using a pseudocount of 1) and fit the embedding using the `embeddr` function using the default settings:
 
-```{r embedding_highmag, cache=TRUE,  fig.width=7.5, fig.height=4.5}
+```{r embedding_highmag, cache=TRUE,  fig.width=7.5, fig.height=4.5, message = FALSE}
 set.seed(123)
-#sce <- fromCellDataSet(HSMM, use_exprs_as = "fpkm")
-
 gene_indices <- match(names(which(genes_for_embedding)), featureNames(sce))
 sce <- embeddr(sce, genes_for_embedding = gene_indices)
 
@@ -142,7 +98,7 @@ We can view the graph of cells to see how connections between different parts fo
 plot_graph(sce)
 ```
 
-We can also cluster the embedding using kmeans and plot:
+We can also cluster the embedding using Gaussian mixture models from the package `mclust` and plot:
 ```{r clust_emb, cache=TRUE,  fig.width=7.5, fig.height=4.5}
 sce <- cluster_embedding(sce, k = 3)
 
@@ -157,348 +113,107 @@ phenoData(sce_tmp)$cluster <- plyr::mapvalues(pData(sce_tmp)$cluster, from=1:3,
 plot_embedding(sce_tmp)
 ```
 
-We can also examine the effect of selecting genes vs transcriptome-wide embedding:
-```{r compare-gene_select, cache = TRUE, fig.width = 7.5, fig.height=4.5}
-plot_embedding(embeddr(sce_tmp))
+To identify what the different clusters mean we can pass particular gene names to `plot_embedding` and it will vary the point size with expression:
+
+```{r markers-in-space, cache=T, fig.width=9, fig.height=8, message = FALSE}
+marker_genes <- row.names(subset(fData(sce),  gene_short_name %in% c("CDK1", "MYOG", "PDGFRA", 
+                                                                    "SPHK1", "MYF5", "NCAM1")))
+plot_embedding(sce, plot_genes = marker_genes, plot_pseudotime = FALSE, use_short_names = TRUE)
 ```
 
-So the clusters are kept quite separate but there's not the nice separation of differentiation trajectory as before.
-
-Finally, we want to check the method is different to a more primitive technique such as PCA alone:
-
-```{r pca, cache=TRUE,  fig.width=6, fig.height=4.5}
-plotPCA(sce[gene_indices,], colour_by = 'long_state')
+This implies that groups 1 & 2 correspond to differentiating cells while group 3 is the contaminating mesenchymal cells. We can then separate off groups 1 & 2 as `sce_pst`, just those cells we believe to be pseudotemporally regulated: 
+```{r create-sce-pst, cache=TRUE}
+sce_pst <- sce[, pData(sce)$cluster %in% c(1,2)]
 ```
 
 ### Pseudotime fitting
-In the `monocle` paper they show that groups 1 & 3 correspond to differentiating cells while group 2 is contamination. We can separate off groups 1 & 3, fit the pseudotime trajectories and plot:
+
+Pseudotime fitting is performed using the function `fit_pseudotime`:
 
 ```{r fit-pseudotime,  cache=TRUE}
-#save(sce, file='~/delete_me.Rdata')
-sce_23 <- sce[, pData(sce)$cluster %in% c(1,2)]
-sce_23 <- fit_pseudotime(sce_23)
-plot_embedding(sce_23)
-
+sce_pst <- fit_pseudotime(sce_pst)
+plot_embedding(sce_pst)
 ```
-
-We can also compare our pseudotime with that of `monocle`:
-
-```{r comp-mon, cache=TRUE,  fig.width=4, fig.height=4}
-in_state23 <- pData(sce_23)$cell_id
-monocle_df <- filter(pData(HSMM), cell_id %in% in_state23)
-
-qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$pseudotime) +
-  theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
-```
-
-So there is good correspondence between the `monocle` and `embeddr` pseudotimes, though it appears that the `embeddr` version goes in the wrong direction. Pseudotimes are equivalent up to parity and scaling transformations (which is perhaps more philosophical than it sounds), so we can use the `embeddr::reverse_pseudotime` function to make the pseudotimes 'run' in the same direction:
-
-```{r reverse-pseudotime,  fig.width=4, fig.height=4, cache=TRUE}
-sce_23 <- reverse_pseudotime(sce_23)
-qplot(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$pseudotime) +
-  theme_bw() + xlab('Monocle pseudotime') + ylab('embeddr pseudotime')
-sce_23 <- reverse_pseudotime(sce_23)
-```
-
-The overall correlation between the two pseudotime trajectories is `r format(round(cor(arrange(monocle_df, cell_id)$Pseudotime, arrange(pData(sce_23), cell_id)$pseudotime),2), nsmall=2)`, which is pretty good. 
-
 
 ### Plotting genes in pseudotime
 
-To plot the genes in pseudotime we need to provide the original gene values for the cells in clusters 1 & 3:
+We can plot genes in pseudotime without any model fitting using the function `plot_in_pseudotime`. This accepts a subset of an `SCESet` corresponding to a parituclar number of genes and plots them using smoothed LOESS regression. Here we select five genes of particular interest in the original paper. The variable `genes_to_plot` can be anything that will subset an `SCESet`:
 
 ```{r plot-prep, cache=TRUE,  fig.width=5, fig.height=5}
-#xp <- select(data.frame(t(x)), one_of(Mp$cell_id))
-genes_to_plot <- row.names(subset(fData(HSMM), 
+genes_to_plot <- row.names(subset(fData(sce), 
                                   gene_short_name %in% c("CDK1", "MEF2C", "MYH3", "MYOG","ID1")))
-plot_in_pseudotime(sce_23[genes_to_plot,])
+plot_in_pseudotime(sce_pst[genes_to_plot,], use_short_names = TRUE)
 ```
 
-which is largely similar to the monocle equivalent.
+The results are largely equivalent to those identified in monocle.
 
-Let's have a look at the MRF family of transcription factors:
+We can also look at the MRF family of transcription factors:
 
 ```{r mrf,  cache=TRUE}
 mrf <- c('MYOD1', 'MYF5', 'MYF6', 'MYOG') 
-mrf_ind <- sapply(mrf, match, fData(sce_23)$gene_short_name)
+mrf_ind <- sapply(mrf, match, fData(sce_pst)$gene_short_name)
 
-plot_in_pseudotime(sce_23[mrf_ind,], use_short_names = TRUE)
+plot_in_pseudotime(sce_pst[mrf_ind,], use_short_names = TRUE)
 ```
 
-## Robustness of the embedding
+## Differential expression across pseudotime
 
-### Choice of nearest neighbours
+### Fitting a single-gene 
 
-
-```{r neighbour-choice,  fig.width=8, fig.height=6, cache=TRUE, warning=FALSE}
-
-nns <- c(5,6,8,10,15,20)
-sce_npst <- sce
-sce_npst$pseudotime <- NULL
-sce_list <- lapply(nns, function(i) {
-  sce_map <- embeddr(sce_npst, genes_for_embedding = gene_indices, nn = i)
-  sce_map <- fit_pseudotime(sce_map, clusters=c(1, 2))
-#   R <- dplyr::select(pData(sce_map), trajectory_1, trajectory_2, pseudotime)
-#   R <- cbind(R, redDim(sce_map))
-  sce_map
-})
-
-X <- do.call(rbind, lapply(sce_list, redDim))
-X <- cbind(X, nn = rep(nns, each = dim(sce_list[[1]])[2]))
-PD <- do.call(rbind, lapply(sce_list, pData))
-X <- cbind(X, dplyr::select(PD, pseudotime, cluster, trajectory_1, trajectory_2))
-X <- dplyr::arrange(X, nn, pseudotime)
-
-plt <- ggplot(data = X)
-plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
-                                         fill = "cluster"), color = 'gray20',
-                              alpha = 0.65, size = 3.5, shape = 21)
-plt <- plt + facet_wrap(~ nn)
-plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
-                           data=X, color='black',
-                           size = 1.5, alpha = 0.8, linetype=2)
-plt
-```
-
-### Subsampling the number of cells
-
-Subsample to check robustness:
-
-```{r subsample-robust, cache=TRUE, fig.width=8, fig.height=8, warning=FALSE}
-ncv <- 8
-inds <- createFolds(1:ncol(sce), ncv)
-
-sce_subset_list <- lapply(1:ncv, function(i) {
-  sce_reduced <- sce[gene_indices ,-inds[[i]] ]
-  sce_reduced <- embeddr(sce_reduced)
-  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,2))
-  sce_reduced
-})
-
-X <- do.call(rbind, lapply(sce_subset_list, redDim))
-X <- cbind(X, subsample = unlist(sapply(1:length(sce_subset_list), function(i) rep(i, dim(sce_subset_list[[i]])[2]))))
-PD <- do.call(rbind, lapply(sce_subset_list, pData))
-X <- cbind(X, dplyr::select(PD, pseudotime, cluster, trajectory_1, trajectory_2))
-X <- dplyr::arrange(X, subsample, pseudotime)
-
-plt <- ggplot(data = X)
-plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
-                                         fill = "cluster"), color = 'gray20',
-                              alpha = 0.65, size = 3.5, shape = 21)
-plt <- plt + facet_wrap(~ subsample)
-plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
-                           data=X, color='black',
-                           size = 1.5, alpha = 0.8, linetype=2)
-plt
-```
-
-Try the same with 1/2 of the data:
-```{r subsample-robust-3, cache=TRUE, fig.width=8, fig.height=7, warning=FALSE}
-inds_2 <- createMultiFolds(1:ncol(sce), k=2, times=6)
-
-sce_subset_list2 <- lapply(1:length(inds_2), function(i) {
-  sce_reduced <- sce[gene_indices ,-inds_2[[i]] ]
-  sce_reduced <- embeddr(sce_reduced, nn = 5)
-  sce_reduced <- fit_pseudotime(sce_reduced, clusters=c(1,2))
-  return(sce_reduced)
-})
-
-X <- do.call(rbind, lapply(sce_subset_list2, redDim))
-X <- cbind(X, subsample = unlist(sapply(1:length(sce_subset_list2), function(i) rep(i, dim(sce_subset_list2[[i]])[2]))))
-PD <- do.call(rbind, lapply(sce_subset_list2, pData))
-X <- cbind(X, dplyr::select(PD, pseudotime, cluster, trajectory_1, trajectory_2))
-X <- dplyr::arrange(X, subsample, pseudotime)
-
-plt <- ggplot(data = X)
-plt <- plt + geom_point(aes_string(x = "component_1", y = "component_2",
-                                         fill = "cluster"), color = 'gray20',
-                              alpha = 0.65, size = 3.5, shape = 21)
-plt <- plt + facet_wrap(~ subsample)
-plt <- plt + geom_path(aes_string(x = "trajectory_1", y = "trajectory_2"),
-                           data=X, color='black',
-                           size = 1.5, alpha = 0.8, linetype=2)
-plt
-```
-And see that the pseudotime fits are roughly constant:
-
-```{r fit-cv-pst, cache=TRUE,  warning=FALSE, message=FALSE}
-set.seed(45)
-folds <- createMultiFolds(1:ncol(sce), k = 2, times = 30)
-all_embeddings <- lapply(folds, function(ind) {
-    sce_tmp <- embeddr(sce[gene_indices,ind])#, genes_for_embedding = gene_indices)
-    sce_tmp
-  })
-
-psts <- lapply(all_embeddings, function(sce_tmp) {
-  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,2)]
-  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,2))
-  sce_tmp_13$pseudotime
-})
-
- corrs <- sapply(1:length(all_embeddings), function(i) {
-  sce_i <- all_embeddings[[i]]
-  cells_in_i <- pData(sce_i)$cell_id
-  sce_23_red <- sce_23[, pData(sce_23)$cell_id %in% cells_in_i]
-  abs(cor(psts[[i]], sce_23_red$pseudotime, method="spearman"))
-})
-qplot(corrs, geom='density') + theme_bw() +
-  ggtitle('Pseudotime correlation for subsampled cells') +
-  xlab('Correlation')
-
-print(summary(corrs))
-```
-
-### Subsampling the number of genes
-
-```{r subsample-genes, cache=TRUE,  warning=FALSE, message=FALSE}
-##save(sce, gene_indices, file='~/oxford/embeddr//data/saved.Rdata')
-folds <- createMultiFolds(1:length(gene_indices), k = 2, times = 30)
-all_embeddings <- lapply(folds, function(ind) {
-    #sce_tmp <- sce[gene_indices, ind]
-    sce_tmp <- embeddr(sce[gene_indices[ind],])#, genes_for_embedding = gene_indices)
-    sce_tmp
-  })
-
-#all_embeddings_unlist <- unlist(all_embeddings, recursive=FALSE)
-
-psts <- lapply(all_embeddings, function(sce_tmp) {
-  sce_tmp_13 <- sce_tmp[,pData(sce_tmp)$cluster %in% c(1,2)]
-  sce_tmp_13 <- fit_pseudotime(sce_tmp_13, clusters = c(1,2))
-  sce_tmp_13$pseudotime
-})
-
- corrs <- sapply(1:length(all_embeddings), function(i) {
-#   sce_i <- all_embeddings[[i]]
-#   cells_in_i <- pData(sce_i)$cell_id
-#   sce_23_red <- sce_23[, pData(sce_23)$cell_id %in% cells_in_i]
-#   abs(cor(psts[[i]], sce_23_red$pseudotime))
-   abs(cor(pseudotime(sce_23), psts[[i]], method="spearman"))
-})
-qplot(corrs, geom='density') + theme_bw() +
-  ggtitle('Pseudotime correlation for subsampled genes') +
-  xlab('Correlation')
-
-print(summary(corrs))
-```
-
-## Unravelling the contaminated cells
-
-In the original monocle dataset, only a small number of cells were assigned to group 3 ('interstitial mesenchymal cell'). However, our re-analysis suggests it is somewhat a larger with `r sum(pData(sce)$cluster == 2)` cells in total. These cells were identified as mesenchymal cells as they expressed PDGFRA and SPHK1 in high abundances. We can look to see whether in our cell set we've identified more cells that are potentially contamination:
-
-```{r cont1,  cache=TRUE, results='asis'}
-phenoData(sce)$monocle_classification <- mapvalues(pData(sce)$State, from=1:3, c('non-cont','non-cont','cont'))
-phenoData(sce)$embeddr_classification <- mapvalues(pData(sce)$cluster, from=1:3, c('non-cont','non-cont','cont'))
-
-plot_embedding(sce, color_by = "monocle_classification")
-plot_embedding(sce, color_by = "embeddr_classification")
-
-print(kable(as.data.frame(table(dplyr::select(pData(sce), monocle_classification, embeddr_classification)))))
-```
-
-So `embeddr` calls significatnly more cells as contaminated, while calls none as non-contaminated that `monocle` calls contaminated.
-
-What we'd like to do is see how the gene markers compare when considering the contamined cells identified by monocle, the contaminated cells we identify, and all other cells:
-```{r cont2,  cache=TRUE, message=FALSE, warning=FALSE, fig.height=4.5, fig.width=6}
-agree_contamination <- apply(dplyr::select(pData(sce), monocle_classification, embeddr_classification), 
-                             1, function(x) {
-  if(x['monocle_classification'] == 'cont' & x['embeddr_classification'] == 'cont') {
-     return('Agree contamination')
-  } else if(x['monocle_classification'] != 'cont' & x['embeddr_classification'] == 'cont') {
-    return('Embeddr only')
-  }  else if(x['monocle_classification'] == 'cont') {
-      return('Monocle only')
-  } else {
-    return('Agree no contamination')
-  } 
-})
-
-cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("PDGFRA", "SPHK1")))
-short_names <- fData(HSMM)[cont_genes,]$gene_short_name
-y <- exprs(sce[cont_genes,])
-#y <- scale(t(y))
-y <- data.frame(t(y))
-y$agree_contamination <- agree_contamination
-y <- melt(y, id.vars='agree_contamination', variable.name='gene', value.name='counts')
-y$gene <- mapvalues(y$gene, from = cont_genes, to = short_names)
-
-ggplot(y, aes(x=factor(agree_contamination), color=factor(agree_contamination), y=counts)) + 
-  facet_wrap(~gene) + 
-  geom_boxplot(outlier.shape=NA) + geom_jitter(alpha=0.5) +  theme_bw() + xlab('') +
-  theme(axis.text.x = element_text(angle = -50, hjust=0)) + scale_color_fivethirtyeight(guide=FALSE) +
-  ylab('log10(FPKM + 1) counts') + ggtitle('Expression of mesenchymal markers') 
-
-```
-
-So it looks like they might have missed a few cells expressing PDGFRA and SPHK1. We can also plot the markers in the embedded space, as per in the original paper:
-```{r markers-in-space, cache=T, fig.width=9, fig.height=8, message = FALSE}
-cont_genes <- row.names(subset(fData(HSMM),  gene_short_name %in% c("CDK1", "MYOG", "PDGFRA", 
-                                                                    "SPHK1", "MYF5", "NCAM1")))
-plot_embedding(sce, plot_genes = cont_genes, plot_pseudotime = FALSE, use_short_names = TRUE)
-```
-
-Interestingly there appears to be a subset of cells that express both CDK1 and the contamination markers PDGFRA and SPHK1. Let's look at those we've designated as contaminated and plot the expression:
-
-```{r co-expression,  cache=TRUE}
-cdk1_ind <- match('CDK1', fData(HSMM)$gene_short_name)
-pdgfra_ind <- match('PDGFRA', fData(HSMM)$gene_short_name)
-is_contaminated <- pData(sce)$cluster == 2
-
-cx <- exprs(sce[c(cdk1_ind, pdgfra_ind), is_contaminated])
-cx <- data.frame(t(cx))
-names(cx) <- c('CDK1','PDGFRA')
-ggplot(data=cx) + geom_point(aes(x=CDK1, y=PDGFRA)) +
-  theme_minimal() + xlab('CDK1 expression log10(FPKM + 1)') +
-  ylab('PDGFRA expression log10(FPKM + 1)') + 
-  ggtitle('Coexpression of PDGFRA and CDK1 in contaminated cells')
-```
-
-
-
-## Modelling genes in pseudotime
-
-Model a single gene in pseudotime:
+Let's fit differential expression models to the gene CDK1. We can fit a differential expression model over pseudotime using `fit_pseudotime_model` and fit a NULL model using `fit_null_model`. These are essentially the same models used in Monocle though using the AER package which is slightly faster. We can then compute a p-value using the likelihood ratio test with the function `compare_models`.
 
 ```{r model_pseudotime, cache=TRUE,  message=FALSE, warning = FALSE}
-cdk1 <- row.names(subset(fData(HSMM),  gene_short_name == 'CDK1'))
-#sce_23@lowerDetectionLimit <- log10(1 + 0.1)
-model <- fit_pseudotime_model(sce_23, cdk1)
-null_model <- fit_null_model(sce_23, cdk1)
+cdk1 <- row.names(subset(fData(sce_pst),  gene_short_name == 'CDK1'))
+model <- fit_pseudotime_model(sce_pst, cdk1)
+null_model <- fit_null_model(sce_pst, cdk1)
 p_val <- compare_models(model, null_model)
-plot_pseudotime_model(sce_23[cdk1, ], model)
 ```
 
-Now try all of them:
+Note these three steps (`fit_pseudotime_model` -> `fit_null_model` -> `compare_models`) are encapsulated in the single function `gene_pseudotime_test`.
+
+We can then use `plot_pseudotime_model` to view how the model looks across pseudotime. Note this is different to `plot_in_pseudotime` which fits a LOESS curve using `ggplot2` rather than a smoothing-spline model. In `plot_pseudotime_model`, if `model` is NULL then the model will be recomputed.
+
+```{r plot_pseudotime_model, cache=TRUE, message=FALSE, warning=FALSE}
+plot_pseudotime_model(sce_pst[cdk1, ], model)
+```
+
+### Differential expression for an entire `SCESet`
+
+Often we're not concerned about a single-gene but would like to know which genes are pseudotemporally regulated. To do this we use the functino `pseudotime_test` which tests all genes and returns p and FDR-corrected q-values. First reduce the `SCESet` to genes expressed in at least 20% of cells: 
 
 ```{r all-genes, cache=TRUE, warning=FALSE}
-n_cells_expressed <- rowSums(is_exprs(sce_23))
-keep_gene <- n_cells_expressed > 0.2 * dim(sce_23)[2]
-sce_23_kept <- sce_23[keep_gene,]
-# save(sce = sce_23_kept, file = "~/oxford/embeddr/data/sce_pst.Rdata")
-
-## can optionally use pre-computed models in the pseudotime test function. 
-## this is really handy as we can keep these around for predicting and plotting
-## without having to compute them every time
-diff_gene_test <- pseudotime_test(sce_23_kept, n_cores = 1)
+n_cells_expressed <- rowSums(is_exprs(sce_pst))
+keep_gene <- n_cells_expressed > 0.2 * dim(sce_pst)[2]
+sce_pst_kept <- sce_pst[keep_gene,]
 ```
 
-And plot p-vals:
+Then use `pseudotime_test` to get differential expression:
+
+```{r diff-expr-test, cache=TRUE, warning=FALSE}
+diff_gene_test <- pseudotime_test(sce_pst_kept, n_cores = 1)
+head(diff_gene_test)
+```
+
+and plot the p and q values:
 
 ```{r plot-p, cache=TRUE,  warning=FALSE}
 qplot(diff_gene_test$p_val, binwidth = 0.01) + theme_bw() + xlab('p-value') 
 qplot(diff_gene_test$q_val, binwidth = 0.01) + theme_bw() + xlab('corrected p-value')
-
-alpha <- 0.01
-sig_genes <- diff_gene_test$gene[diff_gene_test$q_val < alpha]
-sce_sig <- sce_23_kept[sig_genes,]
 ```
 
-### Identifying gene clusters in pseudotime
+Using an FDR-corrected significance level of 1% we can then create a new SCESet containing only differentially expressed genes:
 
-Use the predicted expression from the fitted models to cluster genes by pseudotemporal expression:
+```{r create-sce-sig}
+alpha <- 0.01
+sig_genes <- diff_gene_test$gene[diff_gene_test$q_val < alpha]
+sce_sig <- sce_pst_kept[sig_genes,]
+```
 
-Now we can calulate the predicted expression matrix:
+## Identifying gene clusters in pseudotime
+
+We use the predicted expression of differentially expressed genes to find pseudotime clusters (again, similar to monocle). The function `predicted_expression` returns the predicted expression matrix from the Tobit regression models. Note that this has to recalculate all the models as storing them takes up too much memory.
+
 ```{r predicted-expression, cache=TRUE, message=FALSE, warning=FALSE}
-## let's get the predicted expression matrix from the models
 pe <- predicted_expression(sce_sig)
 ```
 
@@ -510,7 +225,8 @@ hc <- hclust(as.dist(dist_cor))
 plot(hc, labels=FALSE)
 ```
 
-Now look at conserved modules:
+It's obvious we have four distinct modules. We can cut these and plot the predicted expression in each class:
+
 ```{r plot-modules, fig.width=3, fig.height=8, cache=TRUE, message=FALSE}
 n_cuts <- 4
 gene_classes <- cutree(hc, n_cuts)
@@ -519,7 +235,6 @@ df_gene <- data.frame(gene=colnames(pe), class=gene_classes)
 
 pe <- data.frame(scale(pe)) ## scaled pst-by-gene
 pe$pseudotime <- pseudotime(sce_sig)
-## save(pe, df_gene, file='~/pe.Rdata')
 
 pe_melted <- melt(pe, id.vars='pseudotime', value.name='expression', variable.name='gene')
 pe_melted <- inner_join(pe_melted, df_gene)
@@ -531,26 +246,25 @@ pe_melted <- inner_join(pe_melted, mean_expr_per_group)
 ## pe_melted <- arrange(pe_melted, gene, pseudotime)
 
 ggplot(pe_melted) + geom_line(aes(x=pseudotime, y=mean_expr), color='red') +
-  facet_wrap(~ class, ncol = 1) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
+  facet_wrap(~ class, ncol = 2) + stat_density2d(aes(x=pseudotime, y=expression), n=150) +
   theme_bw() + ylab('Expression') # add ncol = 1 for vertical representation
 
 ```
 
-Number of genes in each class:
+Look at the number of genes in each class:
 
 ```{r genes-per-class, cache=TRUE, results='asis'}
 genes_per_class <- sapply(1:n_cuts, function(i) sum(gene_classes == i))
 df_gpc <- data.frame(Class=1:n_cuts, 'Number in class' = genes_per_class)
 print(kable(df_gpc, caption='Genes per class'))
-
 ```
 
-Now look at enriched GO terms for each class:
+Finally look at GO enrichment for each class using the `goseq` package:
 
 ```{r enrich-go, cache=TRUE, message=FALSE, warning=FALSE}
 genes_per_class <- sapply(1:n_cuts, function(i) 1 * (df_gene$class == i))
 gene_names <- df_gene$gene
-all_genes <- featureNames(sce_23_kept)
+all_genes <- featureNames(sce_pst_kept)
 gene_names <- sapply(as.character(gene_names), function(gn) strsplit(gn, '[.]')[[1]][1])
 all_genes <- sapply(as.character(all_genes), function(gn) strsplit(gn, '[.]')[[1]][1])
 
@@ -573,7 +287,7 @@ reduced <- lapply(enriched_terms, head, 6)
 
 ```
 
-Now print the terms:
+And print the terms:
 
 ```{r print-table, results='asis', cache=TRUE, warning=FALSE}
 for(i in 1:n_cuts) {
@@ -581,6 +295,8 @@ for(i in 1:n_cuts) {
 }
 ```
   
-
+```{r session-info}
+sessionInfo()
+```
   
   

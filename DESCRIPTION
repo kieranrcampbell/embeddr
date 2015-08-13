@@ -9,6 +9,7 @@ License: GPL-3
 LazyData: true
 biocViews: Software
 Imports:
+  scater, 
   ggplot2,
   princurve,
   plyr,
@@ -18,7 +19,6 @@ Imports:
   AER,
   lmtest,
   splines,
-  scater,
   survival,
   Biobase,
   parallel,
@@ -29,10 +29,8 @@ Suggests:
   monocle,
   HSMMSingleCell,
   knitr,
-  caret,
   cowplot,
-  devtools,
   ggthemes,
-  goseq,
-  org.Hs.eg.db
+  Biocstyle,
+  knitr
 VignetteBuilder: knitr
