@@ -1,9 +1,9 @@
 Package: embeddr
 Title: Laplacian eigenmaps & principal curves for pseudotemporal ordering of single-cell RNA-seq data
+Description: Cells sequenced using RNA-seq are invariably at different stages of progression through a diverse range of biological processes. Embeddr uses the laplacian eigenmap algorithm to perform a non-linear dimensionality reduction of the scRNA-seq data before using principal curves to trace through the centre of the manifold and assign a 'pseudotime' to each cell. A range of functions for differential expression is also included.
 Version: 0.99.0
 Authors@R: person("Kieran", "Campbell", , "kieran.campbell@sjc.ox.ac.uk", role = c("aut", "cre"))
 Maintainer: Kieran Campbell <kieran.campbell@sjc.ox.ac.uk>
-Description: Embeddr provides a set of methods for manifold learning on single-cell data followed by principal curve fitting to assign a pseudotime to cells. It starts with normalised single-cell RNA-seq and reduces the dimension using Laplacian Eigenmaps before tracing through the centre of the manifold using principal curves.
 Depends: R (>= 3.2)
 License: GPL-3
 LazyData: true

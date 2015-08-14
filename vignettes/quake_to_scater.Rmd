@@ -1,27 +1,27 @@
 ---
 title: "Converting Quake et al to `scater` object"
 author: "Kieran Campbell"
-date: "08/6/2015"
-output: html_document
+date: "`r Sys.Date()`"
+output: BiocStyle::html_document
 ---
+
+```{r style, echo = FALSE, results = 'asis'}
+BiocStyle::markdown()
+```
 
 This vignette outlines quick conversion from the [Quake et al.](http://www.nature.com/nature/journal/v509/n7500/full/nature13173.html) dataset (available to download [here](http://www.nature.com/nature/journal/v509/n7500/extref/nature13173-s4.txt)) to a `scater` object for use with `embeddr`.
 
 ```{r load-libraries, message=FALSE, warning=FALSE}
 library(scater)
-library(devtools)
 library(data.table)
 library(dplyr)
 ```
 
-After downloading the data, save it to the path defined by `data_path`:
+Fetch data from URL and convert to data.frame:
 ```{r load-data}
-## replace with your downloaded path:
-data_path <- "/net/isi-scratch/kieran/embeddr/data/nature13173-s4.txt" 
+data_url <- "http://www.nature.com/nature/journal/v509/n7500/extref/nature13173-s4.txt"
 
-#data_path <- "~/oxford/embeddr/data/nature13173-s4.txt"
-
-d <- fread(data_path, data.table=FALSE)
+d <- fread(data_url, data.table=FALSE)
 
 ## remove bulk samples:
 d <- dplyr::filter(d, putative_cell_type != 'bulk')
@@ -36,12 +36,11 @@ d_pheno <- select(d, cell_name, time_point, sample, putative_cell_type)
 pd <- new('AnnotatedDataFrame', data=d_pheno)
 lsce <- newSCESet(exprsData = t(d_numeric), phenoData = pd) # this is log2 data so use exprs
 
-validObject(lsce)
+lsce
 ```
 
 Now save to an R object for easy loading:
-```{r save-sce}
-#save_file <- '~/oxford/embeddr/data/lsce.Rdata'
-save_file <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
+```{r save-sce, eval=FALSE}
+save_file <- '~/path/to/lsce.Rdata'
 save(lsce, file=save_file, compress='gzip')
 ```
