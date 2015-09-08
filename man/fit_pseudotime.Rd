@@ -15,11 +15,13 @@ all points are used}
 \item{...}{Additional arguments to be passed to \code{princurve} from \pkg{principal.curve}.}
 }
 \value{
-The dataframe \code{M} with three new variables:
+The modified \code{SCESet} with the following fields added to pData:
 \describe{
-\item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve)}
+\item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve, rescale to [0,1])}
 \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
-\item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
+\item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}
+\item{proj_dist}{The euclidean distance in the plane from each cell to its projection}}
+If a given cell is not in \code{clusters} then the value for each of the above fields is set to \code{NA}.
 }
 \description{
 Fits the pseudotime curve using principal curves from the princurve library

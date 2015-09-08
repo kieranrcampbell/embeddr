@@ -280,11 +280,13 @@ cluster_embedding <- function(sce, method = c("mm", "kmeans"), k = NULL) {
 #'
 #' @export
 #'
-#' @return The dataframe \code{M} with three new variables:
+#' @return The modified \code{SCESet} with the following fields added to pData:
 #' \describe{
-#' \item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve)}
+#' \item{pseudotime}{The pseudotime of the cell (arc-length from beginning of curve, rescale to [0,1])}
 #' \item{trajectory_1}{The x-coordinate of a given cell's projection onto the curve}
-#' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}}
+#' \item{trajectory_2}{The y-coordinate of a given cell's projection onto the curve}
+#' \item{proj_dist}{The euclidean distance in the plane from each cell to its projection}}
+#' If a given cell is not in \code{clusters} then the value for each of the above fields is set to \code{NA}.
 #' @examples
 #' library(scater)
 #' data('sc_example_counts') ; sce <- newSCESet(countData = sc_example_counts)
@@ -300,18 +302,26 @@ fit_pseudotime <- function(sce, clusters = NULL, ...) {
         cells_in_cluster <- pData(sce)$cluster %in% clusters
     
     Mcl <- M[cells_in_cluster, ]
-    pc <- principal.curve(x = as.matrix(select(Mcl, component_1, component_2)), ...)
+    X <- as.matrix(select(Mcl, component_1, component_2))
+    pc <- principal.curve(x = X, ...)
     pst <- pc$lambda
+    
+    ## rescale pseudotimes to be in [0, 1]
     pst <- (pst - min(pst))/(max(pst) - min(pst))
     
-    pseudotime <- trajectory_1 <- trajectory_2 <- rep(NA, n_cells)
+    ## find orthogonal distances to projections
+    d <- sqrt(rowSums(X - pc$s)^2)
+    
+    proj_dist <- pseudotime <- trajectory_1 <- trajectory_2 <- rep(NA, n_cells)
     pseudotime[cells_in_cluster] <- pst
     trajectory_1[cells_in_cluster] <- pc$s[, 1]
     trajectory_2[cells_in_cluster] <- pc$s[, 2]
+    proj_dist[cells_in_cluster] <- d
     
     phenoData(sce)$pseudotime <- pseudotime
     phenoData(sce)$trajectory_1 <- trajectory_1
     phenoData(sce)$trajectory_2 <- trajectory_2
+    phenoData(sce)$proj_dist <- proj_dist
     return(sce)
 }
 
