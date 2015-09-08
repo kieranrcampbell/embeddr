@@ -227,6 +227,7 @@ remove_pseudotime <- function(sce) {
     sce$pseudotime <- NULL
     sce$trajectory_1 <- NULL
     sce$trajectory_2 <- NULL
+    sce$proj_dist <- NULL
     return(sce)
 }
 
