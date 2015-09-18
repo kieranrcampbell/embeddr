@@ -116,6 +116,7 @@ plot_embedding(sce_tmp)
 To identify what the different clusters mean we can pass particular gene names to `plot_embedding` and it will vary the point size with expression:
 
 ```{r markers-in-space, cache=T, fig.width=9, fig.height=8, message = FALSE}
+
 marker_genes <- row.names(subset(fData(sce),  gene_short_name %in% c("CDK1", "MYOG", "PDGFRA", 
                                                                     "SPHK1", "MYF5", "NCAM1")))
 plot_embedding(sce, plot_genes = marker_genes, plot_pseudotime = FALSE, use_short_names = TRUE)

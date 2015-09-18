@@ -7,7 +7,7 @@ Maintainer: Kieran Campbell <kieran.campbell@sjc.ox.ac.uk>
 Depends: R (>= 3.2)
 License: GPL-3
 LazyData: true
-biocViews: Software
+biocViews: RNASeq, GeneExpression, Visualization
 Imports:
   scater, 
   ggplot2,
