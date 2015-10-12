@@ -5,7 +5,8 @@
 \title{Plot the fit in pseudotime}
 \usage{
 plot_pseudotime_model(sce, models = NULL, n_cores = 2,
-  facet_wrap_scale = "fixed", use_log_scale = FALSE, color_by = NULL)
+  facet_wrap_scale = "fixed", use_log_scale = FALSE, color_by = NULL,
+  nrow = NULL, ncol = NULL, mask_min_expr = TRUE, ...)
 }
 \arguments{
 \item{sce}{An object of class SCE set}
@@ -21,6 +22,15 @@ Should scales be fixed ('fixed', the default), free ('free'), or free in one dim
 \item{use_log_scale}{Logical If TRUE scale_y_log10 is added to plot}
 
 \item{color_by}{The variable in pData(sce) by which to colour the points}
+
+\item{nrow}{Number of rows to be passed to ggplot2::facet_wrap}
+
+\item{ncol}{NUmber of columns to be passed to ggplot2::facet_wrap}
+
+\item{mask_min_expr}{Logical. If TRUE (default) any predicted expression less than
+sce@lowerDetectionLimit will be set to sce@lowerDetectionLimit}
+
+\item{...}{Additional arguments to fit_pseudotime_models}
 }
 \value{
 An plot object from \code{ggplot}

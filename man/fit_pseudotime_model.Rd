@@ -4,12 +4,12 @@
 \alias{fit_pseudotime_model}
 \title{Fit the gene expression profile in pseudotime}
 \usage{
-fit_pseudotime_model(sce, gene)
+fit_pseudotime_model(sce, gene, ...)
 }
 \arguments{
 \item{sce}{An object of type SCESet}
 
-\item{gene}{The gene name to fit}
+\item{gene}{The gene name to fit, or anything that can subset the SCE model to a single gene}
 }
 \value{
 An object of class AER::tobit

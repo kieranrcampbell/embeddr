@@ -4,12 +4,14 @@
 \alias{fit_pseudotime_models}
 \title{Generate a list of pseudotime models corresponding to ALL genes in sce}
 \usage{
-fit_pseudotime_models(sce, n_cores = 2)
+fit_pseudotime_models(sce, n_cores = 2, ...)
 }
 \arguments{
 \item{sce}{An object of class \code{SCESet}}
 
 \item{n_cores}{The number of cores to use in the call to \code{mclapply}}
+
+\item{...}{Additional arguments to fit_pseudotime_model}
 }
 \value{
 A list of models returned by AER::tobit

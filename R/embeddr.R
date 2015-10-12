@@ -586,7 +586,9 @@ plot_graph <- function(sce) {
 #' is used to censor values less than min_expr
 #'
 #' @param sce An object of type SCESet
-#' @param gene The gene name to fit
+#' @param gene The gene name to fit, or anything that can subset the SCE model to a single gene
+#' @param ... Additional arguments to be passed to AER::tobit
+#' 
 #' @export
 #' @importFrom AER tobit
 #' @importFrom splines bs
@@ -600,12 +602,17 @@ plot_graph <- function(sce) {
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' model <- fit_pseudotime_model(sce, 1) # fit for first gene
-fit_pseudotime_model <- function(sce, gene) {
+fit_pseudotime_model <- function(sce, gene, ...) {
     t <- pData(sce)$pseudotime
-    y <- exprs(sce)[gene, ]
+    if(is.null(t)) stop("Please fit pseudotime first")
+    
+    y <- as.vector(exprs(sce[gene, ]))
+    
+    if(length(y) != length(t)) stop(" 'gene' must subset 'sce' to a single gene")
+    
     min_expr <- sce@lowerDetectionLimit  # see paper
     b <- bs(t, df = 3)
-    fit <- AER::tobit(y ~ b, left = min_expr)
+    fit <- AER::tobit(y ~ b, left = min_expr, ...)
     return(fit)
 }
 
@@ -640,7 +647,12 @@ fit_null_model <- function(sce, gene) {
 #' @param use_log_scale Logical If TRUE scale_y_log10 is added to plot
 #' @param facet_wrap_scale Passed to the scales argument in \code{facet_wrap}.
 #'  Should scales be fixed ('fixed', the default), free ('free'), or free in one dimension ('free_x', 'free_y')
-#'  @param color_by The variable in pData(sce) by which to colour the points
+#' @param color_by The variable in pData(sce) by which to colour the points
+#' @param nrow Number of rows to be passed to ggplot2::facet_wrap
+#' @param ncol NUmber of columns to be passed to ggplot2::facet_wrap
+#' @param ... Additional arguments to fit_pseudotime_models
+#' @param mask_min_expr Logical. If TRUE (default) any predicted expression less than 
+#' sce@@lowerDetectionLimit will be set to sce@@lowerDetectionLimit
 #'
 #' @import ggplot2
 #' @importFrom reshape2 melt
@@ -653,10 +665,12 @@ fit_null_model <- function(sce, gene) {
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' plot_pseudotime_model(sce[1,]) # select first gene
-plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2, facet_wrap_scale = "fixed", use_log_scale = FALSE, 
-    color_by = NULL) {
+plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2, 
+                                  facet_wrap_scale = "fixed", use_log_scale = FALSE, 
+                                  color_by = NULL, nrow = NULL, ncol = NULL, 
+                                  mask_min_expr = TRUE, ...) {
     if (is.null(models)) 
-        models <- fit_pseudotime_models(sce, n_cores)
+        models <- fit_pseudotime_models(sce, n_cores, ...)
     # if(class(models) == 'list' && dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene
     # in sce')
     
@@ -679,12 +693,16 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2, facet_wrap_sc
     pe_melted <- melt(pe, id.vars = "pseudotime", value.name = "predicted", variable.name = "gene")
     
     df <- dplyr::full_join(y_melted, pe_melted, by = c("pseudotime", "gene"))
-    df$predicted[df$predicted < min_expr] <- min_expr
+    
+    if(mask_min_expr)
+      df$predicted[df$predicted < min_expr] <- min_expr
+    
     df$min_expr <- min_expr
     
     plt <- ggplot(df) + geom_line(aes_string(x = "pseudotime", y = "predicted"), color = "red") + theme_minimal() + 
         geom_line(aes_string(x = "pseudotime", y = "min_expr"), color = "grey", linetype = 2) + scale_color_manual("", 
-        values = c(`Min expr` = "grey", Predicted = "red")) + facet_wrap(~gene, scales = facet_wrap_scale) + 
+        values = c(`Min expr` = "grey", Predicted = "red")) + 
+        facet_wrap(~gene, scales = facet_wrap_scale, nrow = nrow, ncol = ncol) + 
         ylab("expression")
     if (is.null(color_by)) {
         plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs"))
@@ -795,6 +813,7 @@ pseudotime_test <- function(sce, n_cores = 2) {
 #'
 #' @param sce An object of class \code{SCESet}
 #' @param n_cores The number of cores to use in the call to \code{mclapply}
+#' @param ... Additional arguments to fit_pseudotime_model
 #' @importFrom parallel mclapply
 #'
 #' @export
@@ -805,13 +824,13 @@ pseudotime_test <- function(sce, n_cores = 2) {
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' models <- fit_pseudotime_models(sce, n_cores = 1)
-fit_pseudotime_models <- function(sce, n_cores = 2) {
+fit_pseudotime_models <- function(sce, n_cores = 2, ...) {
     models <- NULL
-    fpm_wrapper <- function(gene, sce) fit_pseudotime_model(sce, gene)
+    fpm_wrapper <- function(gene, sce, ...) fit_pseudotime_model(sce, gene, ...)
     if (n_cores == 1) {
-        models <- lapply(featureNames(sce), fpm_wrapper, sce)
+        models <- lapply(featureNames(sce), fpm_wrapper, sce, ...)
     } else {
-        models <- mclapply(featureNames(sce), fpm_wrapper, sce, mc.cores = n_cores)
+        models <- mclapply(featureNames(sce), fpm_wrapper, sce, mc.cores = n_cores, ...)
     }
     names(models) <- featureNames(sce)
     return(models)
