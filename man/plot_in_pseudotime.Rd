@@ -5,7 +5,8 @@
 \title{Plot cells in pseudotime}
 \usage{
 plot_in_pseudotime(sce, nrow = NULL, ncol = NULL, use_short_names = FALSE,
-  use_log_scale = FALSE, facet_wrap_scales = "fixed")
+  use_log_scale = FALSE, facet_wrap_scales = "fixed",
+  color_by = "cluster", y_lab = "Expression")
 }
 \arguments{
 \item{sce}{An object of class \code{SCESet}}
@@ -21,7 +22,11 @@ plot will be the gene short names.}
 \item{use_log_scale}{Logical If TRUE scale_y_log10 is added to plot}
 
 \item{facet_wrap_scales}{Passed to the scales argument in \code{facet_wrap}.
- Should scales be fixed ('fixed', the default), free ('free'), or free in one dimension ('free_x', 'free_y')}
+Should scales be fixed ('fixed', the default), free ('free'), or free in one dimension ('free_x', 'free_y')}
+
+\item{color_by}{What variable should points be coloured by? Must be in \code{pData(sce)} or \code{NULL}}
+
+\item{y_lab}{Y-axis label for plot.}
 }
 \value{
 A \pkg{ggplot2} plot

@@ -460,6 +460,8 @@ plot_embedding <- function(sce, color_by = "cluster", plot_genes = NULL, use_sho
 #'  @param use_log_scale Logical If TRUE scale_y_log10 is added to plot
 #'  @param facet_wrap_scales Passed to the scales argument in \code{facet_wrap}.
 #'  Should scales be fixed ('fixed', the default), free ('free'), or free in one dimension ('free_x', 'free_y')
+#'  @param color_by What variable should points be coloured by? Must be in \code{pData(sce)} or \code{NULL}
+#'  @param y_lab Y-axis label for plot.
 #'
 #'  @export
 #'  @import ggplot2
@@ -474,26 +476,31 @@ plot_embedding <- function(sce, color_by = "cluster", plot_genes = NULL, use_sho
 #' sce <- embeddr(sce)
 #' sce <- fit_pseudotime(sce)
 #' plot_in_pseudotime(sce[1:4,]) # plot first four genes
-plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = FALSE, use_log_scale = FALSE, 
-    facet_wrap_scales = "fixed") {
+plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, 
+                               use_short_names = FALSE, use_log_scale = FALSE, 
+                              facet_wrap_scales = "fixed", color_by = "cluster",
+                              y_lab = "Expression") {
     xp <- data.frame(t(exprs(sce)), check.names = FALSE)  # now cell-by-gene
     if (use_short_names) 
         names(xp) <- fData(sce)$gene_short_name
     
     xp$pseudotime <- pData(sce)$pseudotime
     
-    cn <- "cluster" %in% names(pData(sce))
-    if (cn) 
-        xp$cluster <- as.factor(pData(sce)$cluster)
+    cn <- !is.null(color_by) && color_by %in% names(pData(sce))
+    if (cn) {
+        xp <- cbind(xp, dplyr::select(pData(sce), contains(color_by)))
+        names(xp)[ncol(xp)] <- color_by
+    }
+    
     id_vars <- "pseudotime"
     if (cn) 
-        id_vars <- c(id_vars, "cluster")
+        id_vars <- c(id_vars, color_by)
     
     df_x <- melt(xp, id.vars = id_vars, variable.name = "gene", value.name = "counts")
     
     plt <- NULL
     if (cn) {
-        plt <- ggplot(data = df_x, aes_string(x = "pseudotime", y = "counts", color = "cluster"))
+        plt <- ggplot(data = df_x, aes_string(x = "pseudotime", y = "counts", color = color_by))
     } else {
         plt <- ggplot(data = df_x, aes_string(x = "pseudotime", y = "counts"))
     }
@@ -501,7 +508,7 @@ plot_in_pseudotime <- function(sce, nrow = NULL, ncol = NULL, use_short_names = 
         plt <- plt + scale_y_log10()
     
     return(plt + geom_point(size = 1.5) + theme_bw() + geom_smooth(method = "loess", color = "firebrick") + facet_wrap(~gene, 
-        nrow = nrow, ncol = ncol, scales = facet_wrap_scales) + ylab("Normalised log10(FPKM)"))
+        nrow = nrow, ncol = ncol, scales = facet_wrap_scales) + ylab(y_lab))
 }
 
 #' Reverse pseudotime
@@ -653,6 +660,7 @@ fit_null_model <- function(sce, gene) {
 #' @param ... Additional arguments to fit_pseudotime_models
 #' @param mask_min_expr Logical. If TRUE (default) any predicted expression less than 
 #' sce@@lowerDetectionLimit will be set to sce@@lowerDetectionLimit
+#' @param line_color The colour of the predicted expression line to draw
 #'
 #' @import ggplot2
 #' @importFrom reshape2 melt
@@ -668,7 +676,7 @@ fit_null_model <- function(sce, gene) {
 plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2, 
                                   facet_wrap_scale = "fixed", use_log_scale = FALSE, 
                                   color_by = NULL, nrow = NULL, ncol = NULL, 
-                                  mask_min_expr = TRUE, ...) {
+                                  mask_min_expr = TRUE, line_color = "red", ...) {
     if (is.null(models)) 
         models <- fit_pseudotime_models(sce, n_cores, ...)
     # if(class(models) == 'list' && dim(sce)[1] != length(models)) stop('Must have a fitted model for each gene
@@ -686,7 +694,16 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2,
     names(y) <- gene_names
     
     y$pseudotime <- pseudotime(sce)
-    y_melted <- melt(y, id.vars = "pseudotime", value.name = "exprs", variable.name = "gene")
+    id_vars <- "pseudotime"
+    
+    cn <- !is.null(color_by) && color_by %in% names(pData(sce))
+    if(cn) {
+      y <- cbind(y, dplyr::select(pData(sce), contains(color_by)))
+      names(y)[ncol(y)] <- color_by
+      id_vars <- c(id_vars, color_by)
+    }
+    
+    y_melted <- melt(y, id.vars = id_vars, value.name = "exprs", variable.name = "gene")
     pe <- data.frame(predicted_expression(sce, models))
     names(pe) <- gene_names
     pe$pseudotime <- pseudotime(sce)
@@ -699,22 +716,18 @@ plot_pseudotime_model <- function(sce, models = NULL, n_cores = 2,
     
     df$min_expr <- min_expr
     
-    plt <- ggplot(df) + geom_line(aes_string(x = "pseudotime", y = "predicted"), color = "red") + theme_minimal() + 
-        geom_line(aes_string(x = "pseudotime", y = "min_expr"), color = "grey", linetype = 2) + scale_color_manual("", 
-        values = c(`Min expr` = "grey", Predicted = "red")) + 
+    plt <- ggplot(df) + geom_line(aes_string(x = "pseudotime", y = "predicted"), color = line_color) + theme_minimal() + 
+        geom_line(aes_string(x = "pseudotime", y = "min_expr"), color = "grey", linetype = 2) + 
         facet_wrap(~gene, scales = facet_wrap_scale, nrow = nrow, ncol = ncol) + 
         ylab("expression")
-    if (is.null(color_by)) {
+    if (!cn) {
         plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs"))
     } else {
-        if (color_by %in% names(pData(sce))) {
-            plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs", color = color_by))
-        } else {
-            plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs"))
-        }
+        plt <- plt + geom_point(aes_string(x = "pseudotime", y = "exprs", color = color_by))
     }
+
     if (use_log_scale) 
-        plt <- plt + scale_y_log10()
+      plt <- plt + scale_y_log10()
     return(plt)
 }
 

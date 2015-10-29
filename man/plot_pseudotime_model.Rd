@@ -6,7 +6,8 @@
 \usage{
 plot_pseudotime_model(sce, models = NULL, n_cores = 2,
   facet_wrap_scale = "fixed", use_log_scale = FALSE, color_by = NULL,
-  nrow = NULL, ncol = NULL, mask_min_expr = TRUE, ...)
+  nrow = NULL, ncol = NULL, mask_min_expr = TRUE, line_color = "red",
+  ...)
 }
 \arguments{
 \item{sce}{An object of class SCE set}
@@ -29,6 +30,8 @@ Should scales be fixed ('fixed', the default), free ('free'), or free in one dim
 
 \item{mask_min_expr}{Logical. If TRUE (default) any predicted expression less than
 sce@lowerDetectionLimit will be set to sce@lowerDetectionLimit}
+
+\item{line_color}{The colour of the predicted expression line to draw}
 
 \item{...}{Additional arguments to fit_pseudotime_models}
 }

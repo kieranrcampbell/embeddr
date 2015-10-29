@@ -10,6 +10,8 @@ fit_pseudotime_model(sce, gene, ...)
 \item{sce}{An object of type SCESet}
 
 \item{gene}{The gene name to fit, or anything that can subset the SCE model to a single gene}
+
+\item{...}{Additional arguments to be passed to AER::tobit}
 }
 \value{
 An object of class AER::tobit
